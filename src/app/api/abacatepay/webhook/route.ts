@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { getSupabaseAdmin } from "../../../../services/backend/dbService"
 
 /**
  * Webhook endpoint para o AbacatePay.
@@ -27,14 +28,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ ok: true, ignored: true })
         }
 
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-
-        if (!url || !key) {
-            return NextResponse.json({ error: "Supabase não configurado" }, { status: 500 })
-        }
-
-        const supa = createClient(url, key)
+        const supa = getSupabaseAdmin()
 
         // O AbacatePay envia billing.paid para AMBOS:
         // 1) PIX QR Code → payload tem data.pixQrCode com { id, status, amount }

@@ -3,18 +3,30 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import QRCode from "react-qr-code"
 import type { Installment, InstallmentStatus } from "../lib/types"
 import { supabase } from "../lib/supabaseClient"
+import { apiService } from "../services/frontend/apiService"
+import PaymentResultScreen from "./PaymentResultScreen"
 
 type PaymentTab = "pix" | "boleto"
 
 export default function PaymentScreen({
     installment,
     onBack,
+    onGoHome,
     onStatusChange
 }: {
     installment: Installment
     onBack: () => void
+    onGoHome?: () => void
     onStatusChange: (newStatus: InstallmentStatus, installment: Installment) => void
 }) {
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = 0
+        }
+    }, [installment])
+
     const [activeTab, setActiveTab] = useState<PaymentTab>("pix")
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -22,6 +34,7 @@ export default function PaymentScreen({
     const [chargeId, setChargeId] = useState<string>("")
     const [copied, setCopied] = useState(false)
     const [paid, setPaid] = useState(false)
+    const [showResult, setShowResult] = useState(false)
     const [simulating, setSimulating] = useState(false)
     const timerRef = useRef<NodeJS.Timeout | null>(null)
     const createdRef = useRef(false) // Guard against duplicate createCharge
@@ -51,23 +64,18 @@ export default function PaymentScreen({
             setLoading(true)
             setError(null)
             try {
-                const res = await fetch("/api/abacatepay/create-charge", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(body)
-                })
-                if (!res.ok) {
-                    let msg = "Falha ao criar cobrança Pix."
-                    try {
-                        const j = await res.json()
-                        const details = j?.error
-                        if (details) msg += ` ${String(details).slice(0, 300)}`
-                    } catch { }
-                    setError(msg)
+                if (!body.clicod || !body.pvenum) {
+                    setError("Dados inválidos para gerar cobrança.")
                     setLoading(false)
                     return
                 }
-                const data = await res.json()
+                const data = await apiService.createCharge(body as {
+                    installmentId: string
+                    amount: number
+                    clicod: number
+                    pvenum: number
+                    index: number
+                })
 
                 if (!data.brCode) {
                     setError("QR Code PIX não retornado pela API.")
@@ -92,7 +100,7 @@ export default function PaymentScreen({
                 // Start polling for payment status
                 startPolling(newChargeId)
             } catch (err: any) {
-                setError(`Erro de rede: ${err.message || "tente novamente"}`)
+                setError(err.message || "Erro ao criar cobrança Pix.")
                 setLoading(false)
             }
         }
@@ -128,6 +136,7 @@ export default function PaymentScreen({
         }
 
         setPaid(true)
+        setTimeout(() => setShowResult(true), 1500)
         onStatusChange("pago", installment)
     }
 
@@ -202,8 +211,20 @@ export default function PaymentScreen({
         }
     }
 
+    if (showResult) {
+        return (
+            <PaymentResultScreen
+                success={paid}
+                installment={installment}
+                onClose={onBack}
+                onGoHome={onGoHome}
+                errorMsg={error || undefined}
+            />
+        )
+    }
+
     return (
-        <div className="payment-screen animate__animated animate__fadeIn">
+        <div ref={scrollContainerRef} className="payment-screen animate__animated animate__fadeIn">
             {/* Header */}
             <div className="payment-screen-header">
                 <button className="detail-back-btn" onClick={onBack}>
@@ -229,6 +250,12 @@ export default function PaymentScreen({
                             <i className="bi bi-calendar3 me-1"></i>
                             Vencimento: {dueFormatted}
                         </div>
+                        {installment.product_name && (
+                            <div className="payment-summary-product mt-1" style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>
+                                <i className="bi bi-box-seam me-1"></i>
+                                {installment.product_name}
+                            </div>
+                        )}
                     </div>
                     <div className="payment-summary-icon">
                         <i className="bi bi-receipt-cutoff"></i>

@@ -36,10 +36,10 @@ export default function InstallmentCard({
     >
       <div className="d-flex justify-content-between align-items-start mb-3">
         <div>
-          <div className="text-muted small fw-bold text-uppercase ls-1" style={{ fontSize: '0.65rem' }}>Parcela</div>
-          <div className="fw-bold fs-4 text-dark" style={{ lineHeight: 1.1 }}>
+          <div className="text-muted small fw-bold text-uppercase ls-1" style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.75)' }}>Parcela</div>
+          <div className="fw-bold fs-4 text-white" style={{ lineHeight: 1.1 }}>
             {String(installment.index).padStart(2, '0')}
-            <span className="text-muted fw-normal fs-6"> / {String(installment.count).padStart(2, '0')}</span>
+            <span className="fw-normal fs-6" style={{ color: 'rgba(255,255,255,0.75)' }}> / {String(installment.count).padStart(2, '0')}</span>
           </div>
         </div>
         <div className="d-flex flex-column align-items-end gap-1">
@@ -52,18 +52,24 @@ export default function InstallmentCard({
         </div>
       </div>
 
-      <div className="d-flex align-items-center mb-3 text-muted" style={{ fontSize: '0.75rem' }}>
+      <div className="d-flex align-items-center mb-1" style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase' }}>
+        {installment.product_name && (
+          <><i className="bi bi-box-seam me-2"></i> {installment.product_name}</>
+        )}
+      </div>
+
+      <div className="d-flex align-items-center mb-3" style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)' }}>
         {isPaid ? (
           <><i className="bi bi-check-circle-fill me-2 text-success"></i> Pagamento Confirmado</>
         ) : isLate ? (
-          <><i className="bi bi-exclamation-triangle-fill me-2" style={{ color: 'var(--primary-red)' }}></i> Vencimento: {dueFormatted}</>
+          <><i className="bi bi-exclamation-triangle-fill me-2" style={{ color: 'var(--status-late)' }}></i> Vencimento: {dueFormatted}</>
         ) : (
           <><i className="bi bi-calendar3 me-2"></i> Vencimento: {dueFormatted}</>
         )}
       </div>
 
       <div className="d-flex justify-content-between align-items-end">
-        <div className="fw-bold fs-4" style={{ color: isPaid ? '#A0AEC0' : isLate ? 'var(--primary-red)' : '#1A202C' }}>
+        <div className="fw-bold fs-4" style={{ color: isPaid ? 'rgba(255,255,255,0.55)' : isLate ? 'var(--status-late)' : '#FFFFFF' }}>
           {Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(totalAmount)}
         </div>
         <div className="card-chevron">

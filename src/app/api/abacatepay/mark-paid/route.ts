@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { getSupabaseAdmin } from "../../../../services/backend/dbService"
 
 /**
  * Server-side endpoint to mark a payment as paid.
@@ -15,14 +16,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "chargeId ausente" }, { status: 400 })
         }
 
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-
-        if (!url || !key) {
-            return NextResponse.json({ error: "Supabase não configurado" }, { status: 500 })
-        }
-
-        const supa = createClient(url, key)
+        const supa = getSupabaseAdmin()
 
         // SECURITY: Verify payment with AbacatePay before updating the database
         // This prevents someone from calling this endpoint with a fake chargeId.
@@ -104,25 +98,25 @@ export async function POST(req: Request) {
 
                 const todayDateOnly = new Date().toISOString().split("T")[0]
                 const { error: fbcErr } = await supa
-                    .from("FCRECEBER")
-                    .upsert({
-                        CLICOD: finalClicod,
-                        PCRNOT: pvenum,
-                        FCRPAR: npeseq,
-                        FCRVLP: fbrvlr,
-                        COBCOD: 7,
-                        FCRPGT: todayDateOnly,
-                        ACATUR: 1
-                    }, { onConflict: "PCRNOT,FCRPAR" })
+                        .from("FCRECEBER")
+                        .upsert({
+                            CLICOD: finalClicod,
+                            PCRNOT: pvenum,
+                            FCRPAR: npeseq,
+                            FBRVLR: fbrvlr,
+                            COBCOD: 7,
+                            FBRPGT: todayDateOnly,
+                            ACATUR: 1
+                        }, { onConflict: "PCRNOT,FCRPAR" })
 
-                if (fbcErr) console.error("mark-paid FCRECEBER error:", fbcErr)
-                else console.log("mark-paid FCRECEBER upserted:", { PCRNOT: pvenum, FCRPAR: npeseq, CLICOD: finalClicod })
+                    if (fbcErr) console.error("mark-paid FCRECEBER error:", fbcErr)
+                    else console.log("mark-paid FCRECEBER upserted:", { pvenum, npeseq, finalClicod })
             }
         }
 
-        return NextResponse.json({ ok: true, updated: count })
-    } catch (error) {
-        console.error("mark-paid error:", error)
+        return NextResponse.json({ ok: true })
+    } catch (e) {
+        console.error(e)
         return NextResponse.json({ error: "Erro interno" }, { status: 500 })
     }
 }

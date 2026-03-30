@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import type { Installment } from "../../../../lib/types"
 import { decodeClientId } from "../../../../lib/obfuscate"
+import { dbService, getSupabaseAdmin } from "../../../../services/backend/dbService"
+
+export const dynamic = "force-dynamic"
 
 type ContractWithInstallments = {
     pvenum: number
@@ -23,14 +26,7 @@ export async function GET(
             return NextResponse.json({ error: "CLICOD inválido" }, { status: 400 })
         }
 
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-
-        if (!url || !key) {
-            return NextResponse.json({ error: "Supabase não configurado" }, { status: 500 })
-        }
-
-        const supa = createClient(url, key)
+        const supa = getSupabaseAdmin()
 
         // Fetch customer name and CPF
         const { data: customerData } = await supa
@@ -44,7 +40,7 @@ export async function GET(
 
         const { data, error } = await supa
             .from("NVENDA")
-            .select("PVENUM, PVEDAT, NPESEQ, PVETPA, PAGCOD, PAGDES, CLICOD")
+            .select("PVENUM, PVEDAT, NPESEQ, PVETPA, PAGCOD, PAGDES, CLICOD, PRODES")
             .eq("CLICOD", clicod) // Use number directly
             .order("PVENUM", { ascending: false })
             .order("NPESEQ", { ascending: true })
@@ -53,8 +49,20 @@ export async function GET(
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
+        // Cleanup orphaned records using backend service
+        await dbService.cleanupOrphanedRecords(supa, clicod, data || [])
+
         if (!data || data.length === 0) {
-            return NextResponse.json({ customerName, customerCpf, contracts: [] })
+            return NextResponse.json(
+                { customerName, customerCpf, contracts: [] },
+                {
+                    headers: {
+                        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+                        "Pragma": "no-cache",
+                        "Expires": "0",
+                    },
+                }
+            )
         }
 
         // Fetch FCRECEBER to determine which installments are paid
@@ -149,6 +157,18 @@ export async function GET(
             const pgtMethod = paymentMethodMap.get(fbcKey)
             const paymentMethod = pago ? (pgtMethod || (pagDes === "PIX" ? "PIX" : pagDes === "BOLETO" ? "Boleto" : "PIX")) : null
 
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            const dueDateObj = new Date(due)
+            dueDateObj.setHours(0, 0, 0, 0)
+
+            let status: any = "pendente"
+            if (pago) {
+                status = "pago"
+            } else if (dueDateObj < today) {
+                status = "atrasado"
+            }
+
             item.installments.push({
                 id: `${row.PVENUM}-${row.NPESEQ}`,
                 contract_id: String(row.PVENUM),
@@ -156,16 +176,14 @@ export async function GET(
                 count: 0, // Will be updated later
                 amount: Number(row.PVETPA || 0),
                 due_date: due,
-                status: pago
-                    ? "pago"
-                    : new Date(due).getTime() < Date.now()
-                        ? "atrasado"
-                        : "pendente",
+                status,
                 pix_charge_id: null,
                 pcrnot: Number(row.PVENUM),
                 clicod: clicod,
                 payment_date: fbcPayDate,
-                payment_method: paymentMethod
+                payment_method: paymentMethod,
+                product_name: row.PRODES,
+                purchase_date: row.PVEDAT
             })
         }
 
@@ -174,7 +192,16 @@ export async function GET(
             installments: c.installments.map(i => ({ ...i, count: c.count }))
         })).sort((a, b) => b.pvenum - a.pvenum)
 
-        return NextResponse.json({ customerName, customerCpf, contracts })
+        return NextResponse.json(
+            { customerName, customerCpf, contracts },
+            {
+                headers: {
+                    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            }
+        )
 
     } catch (e) {
         console.error(e)

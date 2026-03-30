@@ -23,6 +23,8 @@ export interface Installment {
   clicod?: number
   payment_date?: string | null
   payment_method?: string | null
+  product_name?: string | null
+  purchase_date?: string | null
 }
 
 export interface PaymentHistory {

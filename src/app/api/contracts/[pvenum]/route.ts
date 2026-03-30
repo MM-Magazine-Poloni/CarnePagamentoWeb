@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { dbService, getSupabaseAdmin } from "../../../../services/backend/dbService"
+
+export const dynamic = "force-dynamic"
 
 export async function GET(
   _req: Request,
@@ -12,24 +15,20 @@ export async function GET(
       return NextResponse.json({ error: "PVENUM inválido" }, { status: 400 })
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-
-    if (!url || !key) {
-      return NextResponse.json({ error: "Supabase não configurado" }, { status: 500 })
-    }
-
-    const supa = createClient(url, key)
+    const supa = getSupabaseAdmin()
 
     const { data: venda, error: vendaErr } = await supa
       .from("NVENDA")
-      .select("PVENUM, PVEDAT, NPESEQ, PVETPA, PAGCOD, PAGDES, CLICOD")
+      .select("PVENUM, PVEDAT, NPESEQ, PVETPA, PAGCOD, PAGDES, CLICOD, PRODES")
       .eq("PVENUM", pvenum)
       .order("NPESEQ", { ascending: true })
 
     if (vendaErr) {
       return NextResponse.json({ error: vendaErr.message }, { status: 500 })
     }
+
+    // Cleanup orphaned records using backend service
+    await dbService.cleanupOrphanedContractRecords(supa, pvenum, venda || [])
 
     if (!venda || venda.length === 0) {
       return NextResponse.json({ error: "Contrato não encontrado" }, { status: 404 })
@@ -89,11 +88,22 @@ export async function GET(
             ? "atrasado"
             : "pendente",
         pix_charge_id: null,
-        pcrnot: Number(v.PVENUM)
+        pcrnot: Number(v.PVENUM),
+        product_name: v.PRODES,
+        purchase_date: v.PVEDAT
       }
     })
 
-    return NextResponse.json({ contract, installments })
+    return NextResponse.json(
+      { contract, installments },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      }
+    )
 
   } catch (e) {
     console.error(e)

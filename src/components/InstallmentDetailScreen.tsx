@@ -1,4 +1,5 @@
 "use client"
+import { useEffect, useRef } from "react"
 import type { Installment } from "../lib/types"
 
 export default function InstallmentDetailScreen({
@@ -12,6 +13,14 @@ export default function InstallmentDetailScreen({
     onPay: () => void
     onHelp?: () => void
 }) {
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = 0
+        }
+    }, [installment])
+
     const totalAmount = installment.amount + (installment.fine_amount || 0)
     const isLate = installment.status === "atrasado"
     const isPaid = installment.status === "pago"
@@ -34,19 +43,16 @@ export default function InstallmentDetailScreen({
         year: "numeric"
     })
 
-    const contractDisplay = installment.pcrnot
-        ? `${String(installment.pcrnot).slice(-3).padStart(3, '0')}.${String(installment.pcrnot).slice(0, 3).padStart(3, '0')}-X`
-        : "---"
+    const contractDisplay = installment.pcrnot ? String(installment.pcrnot) : "---"
 
-    const orderNumber = `MM-${String(installment.pcrnot || 0).padStart(8, '9')}`
+    const orderNumber = `MM-${String(installment.pcrnot || 0).padStart(8, '0')}`
 
-    const purchaseDateFormatted = installment.pcrnot
-        ? new Date(new Date(installment.due_date).getTime() - (installment.index - 1) * 30 * 24 * 60 * 60 * 1000)
-            .toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    const purchaseDateFormatted = installment.purchase_date
+        ? new Date(installment.purchase_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
         : "---"
 
     return (
-        <div className="detail-screen animate__animated animate__fadeIn">
+        <div ref={scrollContainerRef} className="detail-screen animate__animated animate__fadeIn">
             {/* Header */}
             <div className="detail-header">
                 <button className="detail-back-btn" onClick={onBack}>
@@ -92,7 +98,7 @@ export default function InstallmentDetailScreen({
                         <i className="bi bi-box-seam-fill"></i>
                     </div>
                     <div className="detail-product-info">
-                        <div className="detail-product-name">Compra MM Magazine</div>
+                        <div className="detail-product-name">{installment.product_name || "Compra MM Magazine"}</div>
                         <div className="detail-product-order">Pedido #{orderNumber}</div>
                     </div>
                 </div>
