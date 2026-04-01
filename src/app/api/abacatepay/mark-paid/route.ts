@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { getSupabaseAdmin } from "../../../../services/backend/dbService"
 
 /**
@@ -41,14 +40,23 @@ export async function POST(req: Request) {
             }
         }
 
+        // Buscar COBCOD do registro para usar no FCRECEBER (5=Boleto, 7=PIX)
+        const { data: pagRow } = await supa
+            .from("PAGAMENTOS")
+            .select("COBCOD")
+            .eq("PROVIDER_ID", chargeId)
+            .neq("STATUS", "processed")
+            .maybeSingle()
+        const cobcod = pagRow ? Number((pagRow as any).COBCOD) || 7 : 7
+
         // Update payment status in the new PAGAMENTOS table structure
         // The user robot expects 'paid' to change it to 'processed'
         const today = new Date().toISOString()
         const { error: updErr, count } = await supa
             .from("PAGAMENTOS")
-            .update({ 
+            .update({
                 STATUS: "paid",
-                FCRPGT: today 
+                FCRPGT: today
             })
             .eq("PROVIDER_ID", chargeId)
             .neq("STATUS", "processed") // Don't update if already processed by robot
@@ -104,9 +112,8 @@ export async function POST(req: Request) {
                             PCRNOT: pvenum,
                             FCRPAR: npeseq,
                             FBRVLR: fbrvlr,
-                            COBCOD: 7,
-                            FBRPGT: todayDateOnly,
-                            ACATUR: 1
+                            COBCOD: cobcod,
+                            FCRPGT: todayDateOnly
                         }, { onConflict: "PCRNOT,FCRPAR" })
 
                     if (fbcErr) console.error("mark-paid FCRECEBER error:", fbcErr)

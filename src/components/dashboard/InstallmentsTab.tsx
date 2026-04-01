@@ -114,7 +114,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                 }
                 .it-summary-amount {
                     font-family: 'Syne', sans-serif;
-                    font-size: clamp(28px, 8vw, 36px);
+                    font-size: clamp(22px, 6vw, 30px);
                     font-weight: 800;
                     color: #fff;
                     letter-spacing: -1px;
@@ -266,13 +266,13 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                     margin-bottom: 14px;
                 }
                 .it-contract-icon {
-                    width: 42px; height: 42px;
-                    border-radius: 12px;
+                    width: 38px; height: 38px;
+                    border-radius: 10px;
                     background: rgba(227,26,45,0.12);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    font-size: 19px;
+                    font-size: 17px;
                     color: #E31A2D;
                     flex-shrink: 0;
                     box-shadow: inset 0 0 12px rgba(227,26,45,0.05);
@@ -290,7 +290,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                 }
                 .it-contract-num {
                     font-family: 'Syne', sans-serif;
-                    font-size: 15px;
+                    font-size: 13px;
                     font-weight: 700;
                     color: #fff;
                     line-height: 1.2;
@@ -321,16 +321,16 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                     margin-bottom: 12px;
                 }
                 .it-contract-balance-label {
-                    font-size: 11px;
+                    font-size: 10px;
                     letter-spacing: 0.5px;
                     text-transform: uppercase;
                     color: rgba(255,255,255,0.7);
                     font-weight: 600;
-                    margin-bottom: 4px;
+                    margin-bottom: 3px;
                 }
                 .it-contract-balance {
                     font-family: 'Syne', sans-serif;
-                    font-size: 22px;
+                    font-size: clamp(16px, 4.5vw, 20px);
                     font-weight: 800;
                     color: #fff;
                     line-height: 1;
@@ -345,10 +345,10 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                 .it-badge {
                     display: inline-flex;
                     align-items: center;
-                    gap: 5px;
-                    padding: 5px 12px;
+                    gap: 4px;
+                    padding: 4px 10px;
                     border-radius: 999px;
-                    font-size: 11px;
+                    font-size: 10px;
                     font-weight: 700;
                     white-space: nowrap;
                     letter-spacing: 0.2px;
@@ -395,18 +395,18 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                 .it-inst-grid {
                     display: flex;
                     flex-direction: column;
-                    gap: 12px;
+                    gap: 10px;
                     padding-top: 12px;
                     border-top: 1px solid rgba(255,255,255,0.06);
                 }
                 @media (min-width: 480px) {
-                    .it-inst-grid { grid-template-columns: 1fr 1fr; }
+                    .it-inst-grid { display: grid; grid-template-columns: 1fr 1fr; }
                 }
                 @media (min-width: 900px) {
-                    .it-inst-grid { grid-template-columns: repeat(3, 1fr); }
+                    .it-inst-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
                 }
                 @media (min-width: 1200px) {
-                    .it-inst-grid { grid-template-columns: repeat(4, 1fr); }
+                    .it-inst-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
                 }
 
                 /* ── RESPONSIVIDADE ADICIONAL ── */
@@ -450,7 +450,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                             <span className="it-summary-next-dot"></span>
                             Próximo vencimento:&nbsp;
                             <strong style={{ color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>
-                                {new Date(nextInstallment.due_date).toLocaleDateString("pt-BR", { day: 'numeric', month: 'short' })}
+                                {new Date(nextInstallment.due_date + "T12:00:00").toLocaleDateString("pt-BR", { day: 'numeric', month: 'short' })}
                             </strong>
                         </div>
                     )}
@@ -533,6 +533,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                                                 new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
                                             )
 
+                                        if (filteredInstallments.length === 0) return null;
                                         return renderContract(c, filteredInstallments);
                                     })}
 
@@ -557,15 +558,13 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
     )
 
     function renderContract(c: any, filteredInstallments: Installment[]) {
-        const paidCount   = filteredInstallments.filter((i: Installment) => i.status === 'pago').length
         const lateCount   = filteredInstallments.filter((i: Installment) => i.status === 'atrasado').length
-        const openCount   = filteredInstallments.filter((i: Installment) => i.status !== 'pago').length
         const totalValue  = filteredInstallments
             .filter((i: Installment) => i.status !== 'pago')
             .reduce((acc: number, i: Installment) => acc + i.amount, 0)
         const isExpanded  = expandedContract === c.pvenum
-        const progressPct = (paidCount / (filteredInstallments.length || 1)) * 100
-        const isFinished  = openCount === 0;
+        const progressPct = (c.installments.filter((i: Installment) => i.status === 'pago').length / (c.installments.length || 1)) * 100
+        const isFinished  = c.installments.every((i: Installment) => i.status === 'pago');
 
         return (
             <div key={c.pvenum} className={`it-contract${isExpanded ? ' expanded' : ''}${isFinished ? ' finished' : ''}`}>
@@ -611,16 +610,6 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
                                         <span className="it-badge it-badge-late" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ff6b7a', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
                                             <i className="bi bi-exclamation-circle-fill"></i>
                                             {lateCount} {lateCount === 1 ? 'atrasada' : 'atrasadas'}
-                                        </span>
-                                    )}
-                                    {openCount > 0 && (
-                                        <span className="it-badge it-badge-pending" style={{ background: 'rgba(251, 191, 36, 0.15)', color: 'var(--status-pending)', border: '1px solid rgba(251, 191, 36, 0.25)' }}>
-                                            {openCount} {openCount === 1 ? 'pendente' : 'pendentes'}
-                                        </span>
-                                    )}
-                                    {paidCount > 0 && (
-                                        <span className="it-badge it-badge-paid" style={{ background: 'rgba(16, 185, 129, 0.12)', color: 'var(--status-paid)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                                            <i className="bi bi-check-circle-fill"></i> {paidCount} {paidCount === 1 ? 'paga' : 'pagas'}
                                         </span>
                                     )}
                                 </>

@@ -52,7 +52,7 @@ export async function GET(
     }
 
     function addDays(base: string, days: number) {
-      const d = new Date(base)
+      const d = new Date(base + "T12:00:00")
       d.setDate(d.getDate() + days)
       const y = d.getFullYear()
       const m = String(d.getMonth() + 1).padStart(2, "0")
@@ -84,7 +84,7 @@ export async function GET(
         due_date: due,
         status: pago
           ? "pago"
-          : new Date(due).getTime() < Date.now()
+          : new Date(due + "T12:00:00").getTime() < Date.now()
             ? "atrasado"
             : "pendente",
         pix_charge_id: null,

@@ -15,14 +15,16 @@ export default function InstallmentCard({
   const statusClass = isPending ? "badge-aberto" : isLate ? "badge-atrasado" : "badge-pago"
   const totalAmount = installment.amount + (installment.fine_amount || 0)
 
-  const dueFormatted = new Date(installment.due_date).toLocaleDateString("pt-BR", {
+  const parseDate = (d: string) => new Date(d + "T12:00:00")
+
+  const dueFormatted = parseDate(installment.due_date).toLocaleDateString("pt-BR", {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
   })
 
   const paidDateFormatted = installment.payment_date
-    ? new Date(installment.payment_date).toLocaleDateString("pt-BR", {
+    ? parseDate(installment.payment_date).toLocaleDateString("pt-BR", {
         day: '2-digit',
         month: 'short',
         year: 'numeric'

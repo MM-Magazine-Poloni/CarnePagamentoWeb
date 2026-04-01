@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import QRCode from "react-qr-code"
 import type { Installment, InstallmentStatus } from "../lib/types"
-import { supabase } from "../lib/supabaseClient"
 import { apiService } from "../services/frontend/apiService"
 import PaymentResultScreen from "./PaymentResultScreen"
 
@@ -28,6 +27,8 @@ export default function PaymentScreen({
     }, [installment])
 
     const [activeTab, setActiveTab] = useState<PaymentTab>("pix")
+
+    // --- PIX state ---
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [brCode, setBrCode] = useState<string>("")
@@ -37,11 +38,21 @@ export default function PaymentScreen({
     const [showResult, setShowResult] = useState(false)
     const [simulating, setSimulating] = useState(false)
     const timerRef = useRef<NodeJS.Timeout | null>(null)
-    const createdRef = useRef(false) // Guard against duplicate createCharge
+    const createdRef = useRef(false)
+
+    // --- Boleto state ---
+    const [boletoLoading, setBoletoLoading] = useState(false)
+    const [boletoError, setBoletoError] = useState<string | null>(null)
+    const [digitableLine, setDigitableLine] = useState<string>("")
+    const [boletoUrl, setBoletoUrl] = useState<string>("")
+    const [boletoCopied, setBoletoCopied] = useState(false)
+    const [boletoPaid, setBoletoPaid] = useState(false)
+    const boletoCreatedRef = useRef(false)
+    const boletoTimerRef = useRef<NodeJS.Timeout | null>(null)
 
     const totalAmount = installment.amount + (installment.fine_amount || 0)
 
-    const body = useMemo(() => ({
+    const chargeBody = useMemo(() => ({
         installmentId: installment.id,
         amount: totalAmount,
         clicod: installment.clicod,
@@ -49,27 +60,27 @@ export default function PaymentScreen({
         index: installment.index
     }), [installment.id, totalAmount, installment.clicod, installment.pcrnot, installment.index])
 
-    const dueFormatted = new Date(installment.due_date).toLocaleDateString("pt-BR", {
+    const dueFormatted = new Date(installment.due_date + "T12:00:00").toLocaleDateString("pt-BR", {
         day: "numeric",
         month: "short",
         year: "numeric"
     })
 
+    // --- PIX: create charge on mount ---
     useEffect(() => {
-        // Prevent duplicate charge creation (React StrictMode calls useEffect twice)
         if (createdRef.current) return
         createdRef.current = true
 
-        async function createCharge() {
+        async function createPixCharge() {
             setLoading(true)
             setError(null)
             try {
-                if (!body.clicod || !body.pvenum) {
+                if (!chargeBody.clicod || !chargeBody.pvenum) {
                     setError("Dados inválidos para gerar cobrança.")
                     setLoading(false)
                     return
                 }
-                const data = await apiService.createCharge(body as {
+                const data = await apiService.createCharge(chargeBody as {
                     installmentId: string
                     amount: number
                     clicod: number
@@ -84,41 +95,73 @@ export default function PaymentScreen({
                 }
 
                 const newChargeId = data.chargeId || ""
-                console.log("Charge criado:", newChargeId)
                 setBrCode(data.brCode)
                 setChargeId(newChargeId)
-
-                if (installment.pcrnot) {
-                    await supabase
-                        .from("NVENDA")
-                        .update({ ENVIADO: true, PAGDES: "PIX" })
-                        .eq("PVENUM", installment.pcrnot)
-                        .eq("NPESEQ", installment.index)
-                }
-
                 setLoading(false)
-                // Start polling for payment status
-                startPolling(newChargeId)
+                startPixPolling(newChargeId)
             } catch (err: any) {
                 setError(err.message || "Erro ao criar cobrança Pix.")
                 setLoading(false)
             }
         }
-        createCharge()
+        createPixCharge()
         return () => {
             if (timerRef.current) clearInterval(timerRef.current)
         }
-    }, [body])
+    }, [chargeBody])
 
-    async function markAsPaid(pixId: string) {
-        console.log("markAsPaid chamado com provider_id:", pixId)
+    // --- Boleto: create charge when tab is first activated ---
+    useEffect(() => {
+        if (activeTab !== "boleto") return
+        if (boletoCreatedRef.current) return
+        boletoCreatedRef.current = true
 
+        async function createBoletoCharge() {
+            setBoletoLoading(true)
+            setBoletoError(null)
+            try {
+                if (!chargeBody.clicod || !chargeBody.pvenum) {
+                    setBoletoError("Dados inválidos para gerar boleto.")
+                    setBoletoLoading(false)
+                    return
+                }
+                const data = await apiService.createBoleto(chargeBody as {
+                    installmentId: string
+                    amount: number
+                    clicod: number
+                    pvenum: number
+                    index: number
+                })
+
+                if (!data.boletoId) {
+                    setBoletoError("Boleto não retornado pela API.")
+                    setBoletoLoading(false)
+                    return
+                }
+
+                setDigitableLine(data.digitableLine || "")
+                setBoletoUrl(data.url || "")
+                setBoletoLoading(false)
+                startBoletoPolling(data.boletoId)
+            } catch (err: any) {
+                setBoletoError(err.message || "Erro ao criar boleto.")
+                setBoletoLoading(false)
+            }
+        }
+        createBoletoCharge()
+        return () => {
+            if (boletoTimerRef.current) clearInterval(boletoTimerRef.current)
+        }
+    }, [activeTab, chargeBody])
+
+    // --- Shared mark-as-paid ---
+    async function markAsPaid(providerChargeId: string) {
         try {
             const res = await fetch("/api/abacatepay/mark-paid", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    chargeId: pixId,
+                    chargeId: providerChargeId,
                     pvenum: installment.pcrnot || null,
                     npeseq: installment.index || null,
                     clicod: installment.clicod || null,
@@ -136,38 +179,58 @@ export default function PaymentScreen({
         }
 
         setPaid(true)
+        setBoletoPaid(true)
         setTimeout(() => setShowResult(true), 1500)
         onStatusChange("pago", installment)
     }
 
-    async function checkPaymentStatus(pixId: string): Promise<boolean> {
+    // --- PIX polling ---
+    async function checkPixStatus(pixId: string): Promise<boolean> {
         try {
             const res = await fetch(`/api/abacatepay/check-status?id=${encodeURIComponent(pixId)}`)
-            if (!res.ok) {
-                console.warn("check-status HTTP", res.status)
-                return false
-            }
+            if (!res.ok) return false
             const data = await res.json()
-            if (data.status === "PAID") {
-                return true
-            }
-        } catch (err) {
-            console.warn("check-status error:", err)
+            return data.status === "PAID"
+        } catch {
+            return false
         }
-        return false
     }
 
-    function startPolling(pixId: string) {
+    function startPixPolling(pixId: string) {
         if (!pixId) return
         timerRef.current = setInterval(async () => {
-            const isPaid = await checkPaymentStatus(pixId)
+            const isPaid = await checkPixStatus(pixId)
             if (isPaid) {
                 if (timerRef.current) clearInterval(timerRef.current)
                 await markAsPaid(pixId)
             }
-        }, 10000) // 10 seconds to avoid 503 overload
+        }, 10000)
     }
 
+    // --- Boleto polling ---
+    async function checkBoletoStatus(id: string): Promise<boolean> {
+        try {
+            const res = await fetch(`/api/abacatepay/check-status?id=${encodeURIComponent(id)}&type=boleto`)
+            if (!res.ok) return false
+            const data = await res.json()
+            return data.status === "PAID"
+        } catch {
+            return false
+        }
+    }
+
+    function startBoletoPolling(id: string) {
+        if (!id) return
+        boletoTimerRef.current = setInterval(async () => {
+            const isPaid = await checkBoletoStatus(id)
+            if (isPaid) {
+                if (boletoTimerRef.current) clearInterval(boletoTimerRef.current)
+                await markAsPaid(id)
+            }
+        }, 15000) // 15s — boleto não é instantâneo
+    }
+
+    // --- PIX simulate (dev) ---
     async function handleSimulate() {
         if (!chargeId || simulating) return
         setSimulating(true)
@@ -182,9 +245,6 @@ export default function PaymentScreen({
                 setSimulating(false)
                 return
             }
-
-            // Simulate succeeded → payment is done in dev mode
-            // Mark as paid directly (no need to check-status, avoids 503)
             if (timerRef.current) clearInterval(timerRef.current)
             await markAsPaid(chargeId)
         } catch (err) {
@@ -194,27 +254,28 @@ export default function PaymentScreen({
         }
     }
 
+    // --- PIX copy ---
     async function handleCopy() {
-        try {
-            await navigator.clipboard.writeText(brCode)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 3000)
-        } catch {
-            const ta = document.createElement("textarea")
-            ta.value = brCode
-            document.body.appendChild(ta)
-            ta.select()
-            document.execCommand("copy")
-            document.body.removeChild(ta)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 3000)
-        }
+        await copyToClipboard(brCode)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 3000)
+    }
+
+    // --- Boleto copy ---
+    async function handleBoletoCopy() {
+        await copyToClipboard(digitableLine)
+        setBoletoCopied(true)
+        setTimeout(() => setBoletoCopied(false), 3000)
+    }
+
+    async function copyToClipboard(text: string) {
+        await navigator.clipboard.writeText(text)
     }
 
     if (showResult) {
         return (
             <PaymentResultScreen
-                success={paid}
+                success={paid || boletoPaid}
                 installment={installment}
                 onClose={onBack}
                 onGoHome={onGoHome}
@@ -283,6 +344,8 @@ export default function PaymentScreen({
 
             {/* Tab Content */}
             <div className="payment-tab-content">
+
+                {/* PIX Tab */}
                 {activeTab === "pix" && (
                     <div className="animate__animated animate__fadeIn">
                         {paid ? (
@@ -309,7 +372,6 @@ export default function PaymentScreen({
                                     Escaneie o QR Code ou copie a chave PIX abaixo para pagar instantaneamente.
                                 </p>
 
-                                {/* QR Code */}
                                 <div className="payment-qr-container">
                                     <div className="payment-qr-badge">PIX</div>
                                     <div className="payment-qr-box">
@@ -318,7 +380,6 @@ export default function PaymentScreen({
                                     <div className="payment-qr-watermark">PIX • MM Pay</div>
                                 </div>
 
-                                {/* Copy Code */}
                                 <div className="payment-copy-section">
                                     <div className="payment-copy-label">PIX COPIA E COLA</div>
                                     <div className="payment-copy-field">
@@ -334,7 +395,6 @@ export default function PaymentScreen({
                                     {copied ? "Código Copiado!" : "Copiar Código PIX"}
                                 </button>
 
-                                {/* Polling indicator */}
                                 <div className="text-center mt-2">
                                     <div className="d-flex align-items-center justify-content-center gap-2">
                                         <div className="spinner-grow spinner-grow-sm text-success" role="status">
@@ -346,7 +406,6 @@ export default function PaymentScreen({
                                     </div>
                                 </div>
 
-                                {/* Dev Mode: Simulate Payment */}
                                 {chargeId && (
                                     <button
                                         className="payment-simulate-btn"
@@ -362,11 +421,95 @@ export default function PaymentScreen({
                     </div>
                 )}
 
+                {/* Boleto Tab */}
                 {activeTab === "boleto" && (
-                    <div className="payment-boleto-placeholder animate__animated animate__fadeIn">
-                        <i className="bi bi-upc-scan" style={{ fontSize: "3rem", color: "#CBD5E0" }}></i>
-                        <h6 className="fw-bold mt-3 text-dark">Boleto Bancário</h6>
-                        <p className="text-muted small">Funcionalidade em breve. Use PIX para pagamento instantâneo.</p>
+                    <div className="animate__animated animate__fadeIn">
+                        {boletoPaid ? (
+                            <div className="payment-success-box">
+                                <i className="bi bi-check-circle-fill text-success" style={{ fontSize: "3rem" }}></i>
+                                <h5 className="fw-bold mt-3 text-success">Pagamento Confirmado!</h5>
+                                <p className="text-muted small">Boleto pago com sucesso.</p>
+                            </div>
+                        ) : boletoLoading ? (
+                            <div className="payment-loading-box">
+                                <div className="spinner-border text-danger" role="status">
+                                    <span className="visually-hidden">Gerando...</span>
+                                </div>
+                                <p className="text-muted small mt-3">Gerando boleto...</p>
+                            </div>
+                        ) : boletoError ? (
+                            <div className="payment-error-box">
+                                <i className="bi bi-exclamation-triangle-fill text-danger" style={{ fontSize: "2rem" }}></i>
+                                <p className="text-muted small mt-2">{boletoError}</p>
+                            </div>
+                        ) : (
+                            <>
+                                <p className="payment-instruction-text">
+                                    Copie o código de barras ou abra o boleto para pagar no banco ou app.
+                                </p>
+
+                                {/* Barcode visual */}
+                                <div className="payment-qr-container">
+                                    <div className="payment-qr-badge" style={{ background: '#2D3748' }}>BOLETO</div>
+                                    <div className="payment-qr-box" style={{ padding: '1.5rem 1rem' }}>
+                                        <i className="bi bi-upc" style={{ fontSize: '4rem', color: '#2D3748', letterSpacing: '-0.1em' }}></i>
+                                        <div style={{ fontSize: '0.65rem', color: '#718096', marginTop: '0.5rem', wordBreak: 'break-all', textAlign: 'center', maxWidth: 220 }}>
+                                            {digitableLine ? digitableLine.slice(0, 48) + "..." : "—"}
+                                        </div>
+                                    </div>
+                                    <div className="payment-qr-watermark">BOLETO • MM Pay</div>
+                                </div>
+
+                                {/* Linha digitável */}
+                                {digitableLine && (
+                                    <div className="payment-copy-section">
+                                        <div className="payment-copy-label">LINHA DIGITÁVEL</div>
+                                        <div className="payment-copy-field">
+                                            <span className="payment-copy-text">{digitableLine.slice(0, 32)}...</span>
+                                            <button className="payment-copy-icon" onClick={handleBoletoCopy}>
+                                                <i className={`bi ${boletoCopied ? 'bi-check-lg' : 'bi-clipboard'}`}></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {digitableLine && (
+                                    <button className="payment-copy-btn" onClick={handleBoletoCopy}>
+                                        <i className={`bi ${boletoCopied ? 'bi-check-circle-fill' : 'bi-clipboard-check'} me-2`}></i>
+                                        {boletoCopied ? "Código Copiado!" : "Copiar Linha Digitável"}
+                                    </button>
+                                )}
+
+                                {boletoUrl && (
+                                    <a
+                                        href={boletoUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="payment-copy-btn"
+                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', marginTop: '0.5rem', background: '#2D3748', color: '#fff' }}
+                                    >
+                                        <i className="bi bi-box-arrow-up-right me-2"></i>
+                                        Abrir Boleto (PDF)
+                                    </a>
+                                )}
+
+                                <div className="text-center mt-2">
+                                    <div className="d-flex align-items-center justify-content-center gap-2">
+                                        <div className="spinner-grow spinner-grow-sm text-success" role="status">
+                                            <span className="visually-hidden">Aguardando...</span>
+                                        </div>
+                                        <span style={{ fontSize: '0.75rem', color: '#718096', fontWeight: 600 }}>
+                                            Aguardando confirmação do pagamento...
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="text-center mt-2" style={{ fontSize: '0.7rem', color: '#A0AEC0' }}>
+                                    <i className="bi bi-info-circle me-1"></i>
+                                    Boletos podem levar até 3 dias úteis para compensar.
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

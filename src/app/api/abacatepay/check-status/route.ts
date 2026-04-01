@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server"
 
 /**
- * Check the status of a PIX QR Code payment.
- * GET /api/abacatepay/check-status?id=pix_char_xxx
+ * Check payment status.
+ * GET /api/abacatepay/check-status?id=xxx
+ * GET /api/abacatepay/check-status?id=xxx&type=boleto
  */
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url)
-        const pixId = searchParams.get("id")
+        const chargeId = searchParams.get("id")
+        const type = searchParams.get("type") || "pix"
 
-        if (!pixId) {
+        if (!chargeId) {
             return NextResponse.json({ error: "ID ausente" }, { status: 400 })
         }
 
@@ -23,8 +25,11 @@ export async function GET(req: Request) {
             )
         }
 
-        const url = `${apiUrl}/v1/pixQrCode/check?id=${encodeURIComponent(pixId)}`
-        const res = await fetch(url, {
+        const endpoint = type === "boleto"
+            ? `${apiUrl}/v1/billing/check?id=${encodeURIComponent(chargeId)}`
+            : `${apiUrl}/v1/pixQrCode/check?id=${encodeURIComponent(chargeId)}`
+
+        const res = await fetch(endpoint, {
             method: "GET",
             headers: {
                 "Accept": "application/json",

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { getSupabaseAdmin } from "../../../../services/backend/dbService"
 
 export async function POST(req: Request) {
@@ -71,6 +70,15 @@ export async function POST(req: Request) {
     
     if (insertErr) console.error("Erro ao inserir PAGAMENTOS via servidor:", insertErr)
     else console.log("PAGAMENTOS inserido com sucesso via servidor:", chargeId)
+
+    if (pvenum && index) {
+      const { error: nvendaErr } = await supa
+        .from("NVENDA")
+        .update({ ENVIADO: true, PAGDES: "PIX" })
+        .eq("PVENUM", pvenum)
+        .eq("NPESEQ", index)
+      if (nvendaErr) console.error("Erro ao atualizar NVENDA via servidor:", nvendaErr)
+    }
 
     return NextResponse.json({
       chargeId: chargeId,

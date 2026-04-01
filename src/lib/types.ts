@@ -31,7 +31,7 @@ export interface PaymentHistory {
   id: string
   installment_id: string
   amount: number
-  method: "pix"
+  method: "pix" | "boleto"
   status: "pending" | "paid" | "failed"
   created_at: string
   provider_id?: string
