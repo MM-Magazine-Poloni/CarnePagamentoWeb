@@ -492,7 +492,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
 
             <div className="ht-root">
                 {/* Header */}
-                <div className="ht-header">
+                <div className="ht-header" data-tour="welcome">
                     <div>
                         <div className="ht-greeting">Bem-vindo de volta</div>
                         <h1 className="ht-name">Olá, {firstName}!</h1>
@@ -539,7 +539,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                 </div>
 
                 {/* Quick Actions */}
-                <div className="ht-actions">
+                <div className="ht-actions" data-tour="pix-action">
                     <div className="ht-action" onClick={() => setActiveTab('carnes')}>
                         <div className="ht-action-icon" style={{ background: 'rgba(227,26,45,0.12)', color: '#E31A2D' }}>
                             <i className="bi bi-qr-code-scan"></i>
@@ -590,7 +590,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
 
                 {/* Next Payment */}
                 {nextInstallment && (
-                    <div className="ht-payment">
+                    <div className="ht-payment" data-tour="next-payment">
                         <div className="ht-payment-header">
                             <div className="ht-payment-left">
                                 <div className="ht-payment-top-label">Próximo Vencimento</div>

@@ -128,6 +128,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
                                 onClick={() => setActiveTab(item.key)}
                                 aria-label={item.label}
                                 aria-current={isActive ? 'page' : undefined}
+                                {...(item.key === 'carnes' ? { 'data-tour': 'carnes-nav' } : {})}
                             >
                                 <div className="bn-icon-wrap">
                                     <i className={`bi bi-${item.icon}${isActive ? '-fill' : ''}`}></i>

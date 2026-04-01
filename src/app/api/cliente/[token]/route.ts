@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import type { Installment } from "../../../../lib/types"
 import { dbService, getSupabaseAdmin } from "../../../../services/backend/dbService"
+import { verifySessionToken } from "../../../../lib/session"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +14,7 @@ type ContractWithInstallments = {
 }
 
 export async function GET(
-    _req: Request,
+    req: Request,
     { params }: { params: { token: string } }
 ) {
     try {
@@ -22,6 +23,18 @@ export async function GET(
 
         if (!publicToken) {
             return NextResponse.json({ error: "Token ausente" }, { status: 400 })
+        }
+
+        // ── 2. Valida o sessionToken no header Authorization ─────────────────────
+        const authHeader = req.headers.get("Authorization") ?? ""
+        const rawSession = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : ""
+        const session = verifySessionToken(rawSession)
+
+        if (!session || session.publicToken !== publicToken) {
+            return NextResponse.json(
+                { error: "Sessão inválida ou expirada. Faça a validação novamente." },
+                { status: 401 }
+            )
         }
 
         const supa = getSupabaseAdmin()

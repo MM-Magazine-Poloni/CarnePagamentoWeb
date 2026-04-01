@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import type { Installment, InstallmentStatus } from "../../../lib/types"
 import { apiService } from "../../../services/frontend/apiService"
+
+const ValidationScreen = dynamic(
+  () => import("../../../components/ValidationScreen"),
+  { ssr: false }
+)
+
+const ProductTour = dynamic(
+  () => import("../../../components/ProductTour"),
+  { ssr: false }
+)
 import InstallmentDetailScreen from "../../../components/InstallmentDetailScreen"
 import PaymentScreen from "../../../components/PaymentScreen"
 import { HomeTab } from "../../../components/dashboard/HomeTab"
@@ -31,10 +42,17 @@ export default function ClienteContratosPage() {
   const router = useRouter()
 
   // Token público vindo da URL (/cliente/cli_X8mP2Qa9Ld7TyR1Z).
-  // O frontend nunca decodifica nem conhece o CLICOD — isso é responsabilidade da API.
+  // O frontend nunca decodifica nem conhece o CLICOD.
   const publicToken = params?.token as string
 
-  const [loading, setLoading] = useState(true)
+  // ── Sessão ────────────────────────────────────────────────────────────────
+  // sessionToken fica apenas em memória — nunca em localStorage — para maior
+  // segurança contra XSS. O usuário precisará re-validar ao recarregar a página.
+  const [sessionToken, setSessionToken] = useState<string | null>(null)
+  const [sessionExpired, setSessionExpired] = useState(false)
+
+  // ── Dados ─────────────────────────────────────────────────────────────────
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [contracts, setContracts] = useState<ContractWithInstallments[]>([])
   const [customerName, setCustomerName] = useState<string | null>(null)
@@ -71,28 +89,29 @@ export default function ClienteContratosPage() {
     return () => clearTimeout(timer)
   }, [showPaymentSuccess, dismissPaymentSuccess])
 
-  // Carrega dados chamando a API com o token público.
-  // A API localiza o CLICOD internamente — o frontend nunca o vê.
+  // ── Carrega dados após validação ──────────────────────────────────────────
   useEffect(() => {
+    if (!sessionToken || !publicToken) return
+
     let mounted = true
 
     async function load() {
-      if (!publicToken) {
-        setError("Link inválido")
-        setLoading(false)
-        return
-      }
-
       setLoading(true)
       setError(null)
 
       try {
-        const json = await apiService.getCustomerData(publicToken)
+        const json = await apiService.getCustomerData(publicToken, sessionToken!)
         if (!mounted) return
         setCustomerName(json.customerName)
         setContracts(json.contracts || [])
       } catch (err: any) {
         if (!mounted) return
+        if (err?.status === 401) {
+          // Sessão expirou — volta para a tela de validação
+          setSessionToken(null)
+          setSessionExpired(true)
+          return
+        }
         setError(err.message || "Erro de rede")
       } finally {
         if (mounted) setLoading(false)
@@ -101,7 +120,13 @@ export default function ClienteContratosPage() {
 
     load()
     return () => { mounted = false }
-  }, [publicToken])
+  }, [sessionToken, publicToken])
+
+  // ── Callback chamado pelo ValidationScreen após CPF correto ──────────────
+  const handleValidated = useCallback((token: string) => {
+    setSessionExpired(false)
+    setSessionToken(token)
+  }, [])
 
   const openDetail = (inst: Installment) => {
     setSelectedInstallment(inst)
@@ -139,72 +164,90 @@ export default function ClienteContratosPage() {
     return { paid, total, totalAmount, onTimeCount, earlyCount, scoredTotal: paidWithDates.length }
   }, [contracts])
 
+  // ── Tela de validação (antes de qualquer dado ser carregado) ─────────────
+  if (!sessionToken) {
+    return (
+      <ValidationScreen
+        token={publicToken}
+        onValidated={handleValidated}
+        expired={sessionExpired}
+      />
+    )
+  }
+
+  // ── Loading / Error ───────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center vh-100" style={{ background: "#0A0A0C" }}>
+        <div className="spinner-border text-primary-red" role="status">
+          <span className="visually-hidden">Carregando...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="d-flex flex-column justify-content-center align-items-center vh-100 text-center p-4"
+        style={{ background: "#0A0A0C" }}>
+        <i className="bi bi-exclamation-triangle-fill text-danger fs-1 mb-3"></i>
+        <h4 className="fw-bold text-white">Ops! Algo deu errado.</h4>
+        <p className="text-muted">{error}</p>
+        <button className="btn btn-primary-red mt-3 px-4 rounded-3" onClick={() => window.location.reload()}>
+          Tentar Novamente
+        </button>
+      </div>
+    )
+  }
+
+  // ── Dashboard ─────────────────────────────────────────────────────────────
   return (
     <div className="dashboard-container">
-      {loading ? (
-        <div className="d-flex justify-content-center align-items-center vh-100">
-          <div className="spinner-border text-primary-red" role="status">
-            <span className="visually-hidden">Carregando...</span>
-          </div>
-        </div>
-      ) : error ? (
-        <div className="d-flex flex-column justify-content-center align-items-center vh-100 text-center p-4">
-          <i className="bi bi-exclamation-triangle-fill text-danger fs-1 mb-3"></i>
-          <h4 className="fw-bold">Ops! Algo deu errado.</h4>
-          <p className="text-muted">{error}</p>
-          <button className="btn btn-primary-red mt-3 px-4 rounded-3" onClick={() => window.location.reload()}>
-            Tentar Novamente
-          </button>
-        </div>
-      ) : (
-        <>
-          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} customerName={customerName} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} customerName={customerName} />
 
-          <div className="main-content-area">
-            <div className="tab-content-animated" key={activeTab}>
-              {activeTab === 'inicio' && (
-                <HomeTab
-                  customerName={customerName}
-                  stats={stats}
-                  nextInstallment={nextInstallment}
-                  setActiveTab={setActiveTab}
-                  setExpandedContract={setExpandedContract}
-                  openDetail={openDetail}
-                />
-              )}
-              {activeTab === 'suporte' && <SupportTab setActiveTab={setActiveTab} />}
-              {activeTab === 'carnes' && (
-                <InstallmentsTab
-                  contracts={contracts}
-                  stats={stats}
-                  nextInstallment={nextInstallment}
-                  installmentFilter={installmentFilter}
-                  setInstallmentFilter={setInstallmentFilter}
-                  expandedContract={expandedContract}
-                  setExpandedContract={setExpandedContract}
-                  setActiveTab={setActiveTab}
-                  openDetail={openDetail}
-                />
-              )}
-              {activeTab === 'perfil' && (
-                <ProfileTab customerName={customerName} setActiveTab={setActiveTab} stats={stats} />
-              )}
-              {activeTab === 'lojas' && <StoresTab setActiveTab={setActiveTab} />}
-              {activeTab === 'historico' && (
-                <HistoryTab
-                  contracts={contracts}
-                  stats={stats}
-                  setActiveTab={setActiveTab}
-                  setSelectedInstallment={setSelectedInstallment}
-                  setScreenMode={setScreenMode}
-                />
-              )}
-            </div>
-          </div>
+      <div className="main-content-area">
+        <div className="tab-content-animated" key={activeTab}>
+          {activeTab === 'inicio' && (
+            <HomeTab
+              customerName={customerName}
+              stats={stats}
+              nextInstallment={nextInstallment}
+              setActiveTab={setActiveTab}
+              setExpandedContract={setExpandedContract}
+              openDetail={openDetail}
+            />
+          )}
+          {activeTab === 'suporte' && <SupportTab setActiveTab={setActiveTab} />}
+          {activeTab === 'carnes' && (
+            <InstallmentsTab
+              contracts={contracts}
+              stats={stats}
+              nextInstallment={nextInstallment}
+              installmentFilter={installmentFilter}
+              setInstallmentFilter={setInstallmentFilter}
+              expandedContract={expandedContract}
+              setExpandedContract={setExpandedContract}
+              setActiveTab={setActiveTab}
+              openDetail={openDetail}
+            />
+          )}
+          {activeTab === 'perfil' && (
+            <ProfileTab customerName={customerName} setActiveTab={setActiveTab} stats={stats} />
+          )}
+          {activeTab === 'lojas' && <StoresTab setActiveTab={setActiveTab} />}
+          {activeTab === 'historico' && (
+            <HistoryTab
+              contracts={contracts}
+              stats={stats}
+              setActiveTab={setActiveTab}
+              setSelectedInstallment={setSelectedInstallment}
+              setScreenMode={setScreenMode}
+            />
+          )}
+        </div>
+      </div>
 
-          <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
-        </>
-      )}
+      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {screenMode === 'detail' && selectedInstallment && (
         <InstallmentDetailScreen
@@ -243,6 +286,9 @@ export default function ClienteContratosPage() {
       {showPaymentSuccess && (
         <PaymentSuccessOverlay dismissPaymentSuccess={dismissPaymentSuccess} />
       )}
+
+      {/* Product Tour — só renderiza quando o dashboard está visível */}
+      {screenMode === 'none' && <ProductTour />}
     </div>
   )
 }
