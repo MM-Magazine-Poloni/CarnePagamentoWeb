@@ -411,13 +411,25 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({
 
                 /* ── RESPONSIVIDADE ADICIONAL ── */
                 @media (max-width: 360px) {
-                    .it-header { padding: 36px 16px 16px; }
-                    .it-summary { margin: 0 16px 0; padding: 20px; }
-                    .it-filters { padding: 16px 16px 0; }
-                    .it-section-title { margin: 20px 16px 8px; }
-                    .it-list { padding: 16px 16px 0; }
-                    .it-contract-head { padding: 16px; }
-                    .it-contract-balance { font-size: 18px; }
+                    .it-header { padding: 36px 14px 14px; }
+                    .it-summary { margin: 0 14px 0; padding: 18px; }
+                    .it-summary-label { font-size: 9px; }
+                    .it-filters { padding: 14px 14px 0; gap: 6px; }
+                    .it-pill { padding: 6px 13px; font-size: 11px; }
+                    .it-section-title { margin: 18px 14px 8px; font-size: 10px; }
+                    .it-list { padding: 14px 14px 0; gap: 10px; }
+                    .it-contract-head { padding: 13px 13px 11px; }
+                    .it-contract-balance { font-size: 17px; }
+                    .it-contract-icon { width: 34px; height: 34px; font-size: 15px; }
+                    .it-contract-num { font-size: 12px; }
+                    .it-badge { font-size: 9px; padding: 3px 8px; }
+                    .it-contract-body { padding: 0 13px 16px; }
+                }
+
+                @media (max-width: 320px) {
+                    .it-summary { padding: 16px 14px; }
+                    .it-contract-row2 { flex-direction: column; align-items: flex-start; gap: 8px; }
+                    .it-badges { flex-direction: row; flex-wrap: wrap; }
                 }
 
                 @media (min-width: 768px) {

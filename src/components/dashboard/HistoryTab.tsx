@@ -349,6 +349,29 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                     text-align: center;
                     line-height: 1.5;
                 }
+
+                /* ── RESPONSIVIDADE ── */
+                @media (max-width: 360px) {
+                    .hy-header { padding: 36px 14px 14px; }
+                    .hy-progress-card { margin: 0 14px; padding: 16px; }
+                    .hy-progress-inner { gap: 12px; margin-bottom: 12px; }
+                    .hy-ring-wrap, .hy-ring-wrap svg { width: 60px; height: 60px; }
+                    .hy-ring-label { font-size: 11px; }
+                    .hy-progress-count { font-size: 22px; }
+                    .hy-progress-balance-row { flex-direction: column; gap: 10px; }
+                    .hy-balance-value { font-size: 17px; }
+                    .hy-bar-section { width: 100% !important; }
+                    .hy-timeline { padding: 16px 14px 0; gap: 18px; }
+                    .hy-item { padding: 11px 12px; gap: 10px; }
+                    .hy-item-icon { width: 34px; height: 34px; font-size: 14px; }
+                    .hy-item-title { font-size: 12px; }
+                    .hy-item-sub { font-size: 10px; }
+                    .hy-item-amount { font-size: 13px; }
+                }
+
+                @media (min-width: 768px) {
+                    .hy-root { max-width: 900px; margin: 0 auto; padding-bottom: 40px; }
+                }
             `}</style>
 
             <div className="hy-root">
@@ -404,7 +427,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                                 {Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(stats.totalAmount)}
                             </div>
                         </div>
-                        <div style={{ width: '120px' }}>
+                        <div className="hy-bar-section" style={{ width: '120px' }}>
                             <div className="hy-bar">
                                 <div className="hy-bar-fill" style={{ width: `${progressPct}%` }}></div>
                             </div>

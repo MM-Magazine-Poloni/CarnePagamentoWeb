@@ -3,98 +3,352 @@ import React from "react"
 interface ProfileTabProps {
     customerName: string | null
     setActiveTab: (tab: 'inicio' | 'suporte' | 'carnes' | 'perfil' | 'lojas' | 'historico') => void
-    stats?: { paid: number; total: number; totalAmount: number }
+    stats?: { paid: number; total: number; totalAmount: number; onTimeCount: number; earlyCount: number; scoredTotal: number }
 }
 
 export const ProfileTab: React.FC<ProfileTabProps> = ({ customerName, setActiveTab, stats }) => {
-    // Lógica de Nível do Cliente (mesma da HomeTab)
     const getCustomerLevel = () => {
-        if (!stats) return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check' };
-        if (stats.paid >= 10 || stats.total > 20) return { label: 'OURO', color: '#FFD700', icon: 'patch-check-fill' };
-        if (stats.paid >= 5) return { label: 'PRATA', color: '#C0C0C0', icon: 'patch-check-fill' };
-        return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check' };
-    };
-    const level = getCustomerLevel();
+        if (!stats || stats.scoredTotal === 0) {
+            return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check', description: 'Faça seu primeiro pagamento no prazo', pct: 0 }
+        }
+        const pct = Math.round((stats.onTimeCount / stats.scoredTotal) * 100)
+        if (pct >= 90) return { label: 'OURO', color: '#FFD700', icon: 'patch-check-fill', description: 'Pagador exemplar', pct }
+        if (pct >= 60) return { label: 'PRATA', color: '#C0C0C0', icon: 'patch-check-fill', description: 'Bom histórico de pagamentos', pct }
+        return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check', description: 'Pague em dia para subir de nível', pct }
+    }
+    const level = getCustomerLevel()
+    const firstName = customerName ? customerName.split(' ')[0] : 'Cliente'
+    const initials = customerName
+        ? customerName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+        : 'MM'
 
     return (
-        <div className="p-3 bg-app pb-5">
-            <div className="d-flex align-items-center mb-4">
-                <button className="back-btn shadow-sm" onClick={() => setActiveTab('inicio')}>
-                    <i className="bi bi-chevron-left"></i>
+        <>
+            <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+                .pf-root {
+                    font-family: 'DM Sans', sans-serif;
+                    background: #0A0A0C;
+                    min-height: 100%;
+                    color: #fff;
+                    padding-bottom: 100px;
+                }
+
+                /* ── HEADER ── */
+                .pf-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 52px 20px 16px;
+                    position: relative;
+                }
+                .pf-header::before {
+                    content: '';
+                    position: absolute;
+                    top: 0; left: 0; right: 0; height: 130px;
+                    background: radial-gradient(ellipse 80% 100% at 50% -20%, rgba(227,26,45,0.12) 0%, transparent 70%);
+                    pointer-events: none;
+                }
+                .pf-icon-btn {
+                    width: 38px; height: 38px; border-radius: 12px;
+                    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+                    display: flex; align-items: center; justify-content: center;
+                    color: rgba(255,255,255,0.7); font-size: 15px; cursor: pointer;
+                    flex-shrink: 0; transition: background 0.15s;
+                }
+                .pf-icon-btn:hover { background: rgba(255,255,255,0.1); }
+                .pf-header-title {
+                    font-family: 'Syne', sans-serif;
+                    font-size: clamp(15px, 4.5vw, 18px);
+                    font-weight: 700; color: #fff; position: relative;
+                }
+
+                /* ── HERO CARD ── */
+                .pf-hero {
+                    margin: 0 16px 20px;
+                    background: #111114;
+                    border: 1px solid rgba(255,255,255,0.07);
+                    border-radius: 22px;
+                    padding: 24px 20px;
+                    display: flex; flex-direction: column; align-items: center;
+                    position: relative; overflow: hidden;
+                }
+                .pf-hero::before {
+                    content: '';
+                    position: absolute; top: -60px; left: 50%; transform: translateX(-50%);
+                    width: 240px; height: 180px;
+                    background: radial-gradient(ellipse, rgba(227,26,45,0.08) 0%, transparent 70%);
+                    pointer-events: none;
+                }
+                .pf-avatar {
+                    width: 72px; height: 72px; border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center;
+                    font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
+                    color: #fff; margin-bottom: 12px; flex-shrink: 0;
+                    border: 2px solid rgba(255,255,255,0.08);
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+                }
+                .pf-customer-name {
+                    font-family: 'Syne', sans-serif;
+                    font-size: clamp(16px, 5vw, 20px);
+                    font-weight: 700; color: #fff; margin-bottom: 3px;
+                    text-align: center; word-break: break-word;
+                }
+                .pf-customer-cpf {
+                    font-size: 12px; color: rgba(255,255,255,0.3);
+                    margin-bottom: 12px;
+                }
+                .pf-level-pill {
+                    display: inline-flex; align-items: center; gap: 5px;
+                    padding: 5px 14px; border-radius: 999px;
+                    font-size: 10px; font-weight: 800;
+                    letter-spacing: 1.5px; text-transform: uppercase;
+                }
+                .pf-hero-stats {
+                    display: grid; grid-template-columns: 1fr 1fr;
+                    gap: 10px; width: 100%; margin-top: 16px;
+                    padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06);
+                }
+                .pf-stat-cell {
+                    background: rgba(255,255,255,0.04);
+                    border: 1px solid rgba(255,255,255,0.06);
+                    border-radius: 14px; padding: 12px;
+                    display: flex; flex-direction: column; gap: 2px;
+                }
+                .pf-stat-lbl {
+                    font-size: 10px; font-weight: 600; letter-spacing: 1px;
+                    text-transform: uppercase; color: rgba(255,255,255,0.3);
+                }
+                .pf-stat-val {
+                    font-family: 'Syne', sans-serif;
+                    font-size: clamp(15px, 4vw, 18px);
+                    font-weight: 700; color: #fff; line-height: 1.1;
+                }
+                .pf-level-bar-wrap {
+                    width: 100%; margin-top: 14px; padding-top: 14px;
+                    border-top: 1px solid rgba(255,255,255,0.06);
+                }
+                .pf-level-bar-header {
+                    display: flex; justify-content: space-between;
+                    font-size: 10px; color: rgba(255,255,255,0.35);
+                    font-weight: 600; margin-bottom: 6px;
+                }
+                .pf-level-bar {
+                    height: 4px; background: rgba(255,255,255,0.08);
+                    border-radius: 99px; overflow: hidden;
+                }
+                .pf-level-bar-fill {
+                    height: 100%; border-radius: 99px;
+                    transition: width 0.6s ease;
+                }
+
+                /* ── SECTION LABEL ── */
+                .pf-section-lbl {
+                    font-size: 10px; font-weight: 700; letter-spacing: 2px;
+                    text-transform: uppercase; color: rgba(255,255,255,0.3);
+                    margin: 20px 16px 8px;
+                }
+
+                /* ── MENU LIST ── */
+                .pf-menu {
+                    margin: 0 16px;
+                    background: #111114;
+                    border: 1px solid rgba(255,255,255,0.07);
+                    border-radius: 18px;
+                    overflow: hidden;
+                }
+                .pf-menu-item {
+                    display: flex; align-items: center;
+                    gap: 12px; padding: 14px 16px;
+                    border-bottom: 1px solid rgba(255,255,255,0.05);
+                    cursor: pointer;
+                    -webkit-tap-highlight-color: transparent;
+                    transition: background 0.15s;
+                    min-height: 56px;
+                }
+                .pf-menu-item:last-child { border-bottom: none; }
+                .pf-menu-item:hover { background: rgba(255,255,255,0.03); }
+                .pf-menu-item:active { background: rgba(255,255,255,0.05); }
+                .pf-menu-icon {
+                    width: 36px; height: 36px; border-radius: 10px;
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 16px; flex-shrink: 0;
+                }
+                .pf-menu-text { flex: 1; min-width: 0; }
+                .pf-menu-title {
+                    font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85);
+                    line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                }
+                .pf-menu-subtitle {
+                    font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 1px;
+                }
+                .pf-menu-chevron {
+                    color: rgba(255,255,255,0.2); font-size: 12px; flex-shrink: 0;
+                }
+
+                /* ── BUTTONS ── */
+                .pf-btn {
+                    margin: 0 16px;
+                    width: calc(100% - 32px);
+                    padding: 15px; border-radius: 16px;
+                    font-family: 'DM Sans', sans-serif;
+                    font-size: 13px; font-weight: 700;
+                    display: flex; align-items: center; justify-content: center; gap: 8px;
+                    cursor: pointer; border: none;
+                    transition: transform 0.15s, box-shadow 0.15s;
+                    -webkit-tap-highlight-color: transparent;
+                }
+                .pf-btn:active { transform: scale(0.97); }
+                .pf-btn-tutorial {
+                    background: rgba(227,26,45,0.08);
+                    border: 1px solid rgba(227,26,45,0.2) !important;
+                    color: #E31A2D;
+                }
+                .pf-btn-tutorial:hover { background: rgba(227,26,45,0.12); }
+                .pf-btn-exit {
+                    background: #E31A2D; color: #fff;
+                    box-shadow: 0 8px 24px rgba(227,26,45,0.28);
+                }
+                .pf-btn-exit:hover { box-shadow: 0 10px 28px rgba(227,26,45,0.38); }
+
+                /* ── FOOTER ── */
+                .pf-footer {
+                    text-align: center; margin: 20px 0 0; padding-bottom: 8px;
+                }
+                .pf-footer-brand {
+                    font-size: 10px; font-weight: 700; letter-spacing: 2px;
+                    text-transform: uppercase; color: rgba(255,255,255,0.15); margin-bottom: 3px;
+                }
+                .pf-footer-version { font-size: 10px; color: rgba(255,255,255,0.1); }
+
+                /* ── RESPONSIVE ── */
+                @media (max-width: 360px) {
+                    .pf-header { padding: 40px 14px 14px; }
+                    .pf-hero { margin: 0 12px 16px; padding: 20px 16px; }
+                    .pf-section-lbl { margin: 16px 12px 6px; }
+                    .pf-menu { margin: 0 12px; }
+                    .pf-btn { margin: 0 12px; width: calc(100% - 24px); }
+                    .pf-menu-item { padding: 12px 14px; }
+                    .pf-avatar { width: 62px; height: 62px; font-size: 18px; }
+                }
+                @media (min-width: 768px) {
+                    .pf-root { max-width: 560px; margin: 0 auto; padding-bottom: 40px; }
+                }
+            `}</style>
+
+            <div className="pf-root">
+                {/* Header */}
+                <div className="pf-header">
+                    <button className="pf-icon-btn" onClick={() => setActiveTab('inicio')}>
+                        <i className="bi bi-chevron-left"></i>
+                    </button>
+                    <span className="pf-header-title">Perfil</span>
+                    <div style={{ width: 38 }} />
+                </div>
+
+                {/* Hero card */}
+                <div className="pf-hero">
+                    <div className="pf-avatar" style={{ background: `linear-gradient(135deg, ${level.color}55, ${level.color}22)`, border: `2px solid ${level.color}44` }}>
+                        {initials}
+                    </div>
+                    <div className="pf-customer-name">{firstName}</div>
+                    <div className="pf-customer-cpf">CPF: ***.***.***-**</div>
+                    <div className="pf-level-pill" style={{ background: level.color + '1A', border: `1px solid ${level.color}40`, color: level.color }}>
+                        <i className={`bi bi-${level.icon}`} style={{ fontSize: 10 }}></i>
+                        Cliente {level.label}
+                    </div>
+
+                    <div className="pf-level-bar-wrap">
+                        <div className="pf-level-bar-header">
+                            <span>Nível de Pontualidade</span>
+                            <span style={{ color: level.color, fontWeight: 700 }}>{level.pct > 0 ? `${level.pct}%` : '–'}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                                {stats && stats.scoredTotal > 0
+                                    ? `${stats.onTimeCount} de ${stats.scoredTotal} no prazo`
+                                    : 'Sem histórico ainda'}
+                            </span>
+                        </div>
+                        <div className="pf-level-bar">
+                            <div className="pf-level-bar-fill" style={{ width: `${level.pct}%`, background: level.color }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 5 }}>{level.description}</div>
+                    </div>
+                </div>
+
+                {/* Menu — Acesso rápido */}
+                <div className="pf-section-lbl">Acesso Rápido</div>
+                <div className="pf-menu">
+                    <div className="pf-menu-item" onClick={() => setActiveTab('carnes')}>
+                        <div className="pf-menu-icon" style={{ background: 'rgba(227,26,45,0.1)', color: '#E31A2D' }}>
+                            <i className="bi bi-collection-fill"></i>
+                        </div>
+                        <div className="pf-menu-text">
+                            <div className="pf-menu-title">Meus Carnês</div>
+                            <div className="pf-menu-subtitle">Ver parcelas e contratos</div>
+                        </div>
+                        <i className="bi bi-chevron-right pf-menu-chevron"></i>
+                    </div>
+                    <div className="pf-menu-item" onClick={() => setActiveTab('historico')}>
+                        <div className="pf-menu-icon" style={{ background: 'rgba(99,102,241,0.1)', color: '#818CF8' }}>
+                            <i className="bi bi-clock-history"></i>
+                        </div>
+                        <div className="pf-menu-text">
+                            <div className="pf-menu-title">Histórico de Pagamentos</div>
+                            <div className="pf-menu-subtitle">Extrato e comprovantes</div>
+                        </div>
+                        <i className="bi bi-chevron-right pf-menu-chevron"></i>
+                    </div>
+                    <div className="pf-menu-item" onClick={() => setActiveTab('suporte')}>
+                        <div className="pf-menu-icon" style={{ background: 'rgba(245,158,11,0.1)', color: '#FBBF24' }}>
+                            <i className="bi bi-headset"></i>
+                        </div>
+                        <div className="pf-menu-text">
+                            <div className="pf-menu-title">Suporte e Ajuda</div>
+                            <div className="pf-menu-subtitle">Falar com atendimento</div>
+                        </div>
+                        <i className="bi bi-chevron-right pf-menu-chevron"></i>
+                    </div>
+                    <div className="pf-menu-item" onClick={() => setActiveTab('lojas')}>
+                        <div className="pf-menu-icon" style={{ background: 'rgba(16,185,129,0.1)', color: '#34D399' }}>
+                            <i className="bi bi-shop"></i>
+                        </div>
+                        <div className="pf-menu-text">
+                            <div className="pf-menu-title">Nossas Lojas</div>
+                            <div className="pf-menu-subtitle">Endereços e horários</div>
+                        </div>
+                        <i className="bi bi-chevron-right pf-menu-chevron"></i>
+                    </div>
+                </div>
+
+                {/* Tutorial */}
+                <div className="pf-section-lbl">Ajuda</div>
+                <button
+                    className="pf-btn pf-btn-tutorial"
+                    onClick={() => {
+                        setActiveTab('inicio')
+                        setTimeout(() => window.dispatchEvent(new Event("mm:start-tour")), 150)
+                    }}
+                >
+                    <i className="bi bi-play-circle-fill"></i>
+                    Ver tutorial novamente
                 </button>
-                <h5 className="fw-bold m-0 flex-grow-1 text-center" style={{ marginRight: '40px' }}>Perfil</h5>
-            </div>
 
-            <div className="bg-white rounded-4 p-4 shadow-sm text-center mb-4 position-relative overflow-hidden d-flex flex-column align-items-center">
-                <div className="mb-3 d-flex justify-content-center position-relative perfil-avatar-wrapper">
-                    <div className="rounded-4 bg-danger text-white d-flex align-items-center justify-content-center shadow"
-                        style={{ width: '80px', height: '80px', position: 'relative', zIndex: 2, backgroundColor: level.color }}>
-                        <i className="bi bi-person-fill fs-1"></i>
-                    </div>
-                    <div className="position-absolute text-muted opacity-10 fw-bold fst-italic"
-                        style={{ fontSize: '120px', top: -40, right: -20, zIndex: 1, letterSpacing: '-5px' }}>
-                        M
-                    </div>
-                </div>
-                <h4 className="fw-bold text-dark m-0 mb-1">{customerName || 'Cliente MM'}</h4>
-                <p className="text-muted small mb-3">CPF: 000.***.***-00</p>
-                <div className="d-inline-flex rounded-pill px-3 py-1 align-items-center gap-1" 
-                    style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em', backgroundColor: level.color + '20', color: level.color }}>
-                    <i className={`bi bi-${level.icon}`}></i> CLIENTE {level.label}
+                {/* Sair */}
+                <div style={{ height: 12 }} />
+                <button className="pf-btn pf-btn-exit">
+                    <i className="bi bi-box-arrow-left"></i>
+                    Sair da Conta
+                </button>
+
+                {/* Footer */}
+                <div className="pf-footer">
+                    <div className="pf-footer-brand">MM Magazine Digital</div>
+                    <div className="pf-footer-version">Versão 1.0.0</div>
                 </div>
             </div>
-
-            <div className="mb-4">
-                <div className="text-muted fw-bold mb-2 ms-1" style={{ fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Preferências</div>
-                <div className="bg-white rounded-4 shadow-sm overflow-hidden">
-                    <div className="d-flex align-items-center justify-content-between p-3 border-bottom" onClick={() => setActiveTab('suporte')} style={{ cursor: 'pointer' }}>
-                        <div className="d-flex align-items-center gap-3">
-                            <div className="bg-primary bg-opacity-10 text-primary rounded-3 p-2 d-flex align-items-center justify-content-center">
-                                <i className="bi bi-headset fs-5"></i>
-                            </div>
-                            <span className="fw-bold text-dark">Suporte e Ajuda</span>
-                        </div>
-                        <i className="bi bi-chevron-right text-muted small"></i>
-                    </div>
-                    <div className="d-flex align-items-center justify-content-between p-3" style={{ cursor: 'pointer' }}>
-                        <div className="d-flex align-items-center gap-3">
-                            <div className="bg-secondary bg-opacity-10 text-secondary rounded-3 p-2 d-flex align-items-center justify-content-center">
-                                <i className="bi bi-moon-fill fs-5"></i>
-                            </div>
-                            <span className="fw-bold text-dark">Tema do Aplicativo</span>
-                        </div>
-                        <div className="d-flex align-items-center gap-2">
-                            <span className="text-muted small fw-600">Sistema</span>
-                            <i className="bi bi-chevron-right text-muted small"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="mb-4">
-                <div className="text-muted fw-bold mb-2 ms-1" style={{ fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Carnês e Documentos</div>
-                <div className="bg-white rounded-4 shadow-sm overflow-hidden p-3 d-flex align-items-center justify-content-between"
-                    onClick={() => setActiveTab('carnes')} style={{ cursor: 'pointer' }}>
-                    <div className="d-flex align-items-center gap-3">
-                        <div className="rounded-3 p-2 d-flex align-items-center justify-content-center"
-                            style={{ backgroundColor: 'rgba(168, 85, 247, 0.1)', color: '#a855f7' }}>
-                            <i className="bi bi-file-earmark-text-fill fs-5"></i>
-                        </div>
-                        <span className="fw-bold text-dark">Meus Contratos</span>
-                    </div>
-                    <i className="bi bi-chevron-right text-muted small"></i>
-                </div>
-            </div>
-
-            <button className="btn btn-danger w-100 rounded-4 py-3 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm mb-4"
-                style={{ background: '#E31A2D' }}>
-                <i className="bi bi-box-arrow-left"></i> Sair da Conta
-            </button>
-
-            <div className="text-center pb-5 mb-3">
-                <div className="fw-bold text-muted mb-1" style={{ fontSize: '0.6rem', letterSpacing: '0.1em' }}>MM MAGAZINE DIGITAL</div>
-                <div className="text-muted" style={{ fontSize: '0.6rem' }}>Versão 3.4.12 (Build 2024)</div>
-            </div>
-        </div>
+        </>
     )
 }

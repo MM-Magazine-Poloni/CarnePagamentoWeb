@@ -492,7 +492,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
 
             <div className="ht-root">
                 {/* Header */}
-                <div className="ht-header">
+                <div className="ht-header" data-tour="welcome">
                     <div>
                         <div className="ht-greeting">Bem-vindo de volta</div>
                         <h1 className="ht-name">Olá, {firstName}!</h1>
@@ -510,23 +510,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                         <div className="ht-card-body">
                             <div className="ht-card-label">Nível de Pontualidade</div>
                             <div className="ht-card-amount" style={{ color: level.color }}>{level.label}</div>
-                            {stats.scoredTotal > 0 && (
-                                <div style={{ marginTop: 6 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                                            {stats.onTimeCount} de {stats.scoredTotal} no prazo
-                                        </span>
-                                        <span style={{ fontSize: 10, fontWeight: 700, color: level.color }}>{level.pct}%</span>
-                                    </div>
-                                    <div style={{ height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 99, overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', width: `${level.pct}%`, background: level.color, borderRadius: 99, transition: 'width 0.6s ease' }} />
-                                    </div>
-                                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{level.description}</div>
-                                </div>
-                            )}
-                            {stats.scoredTotal === 0 && (
-                                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{level.description}</div>
-                            )}
+                            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{level.description}</div>
                         </div>
                         <div className="ht-card-footer">
                             <div>
@@ -539,7 +523,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                 </div>
 
                 {/* Quick Actions */}
-                <div className="ht-actions">
+                <div className="ht-actions" data-tour="pix-action">
                     <div className="ht-action" onClick={() => setActiveTab('carnes')}>
                         <div className="ht-action-icon" style={{ background: 'rgba(227,26,45,0.12)', color: '#E31A2D' }}>
                             <i className="bi bi-qr-code-scan"></i>
@@ -590,7 +574,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
 
                 {/* Next Payment */}
                 {nextInstallment && (
-                    <div className="ht-payment">
+                    <div className="ht-payment" data-tour="next-payment">
                         <div className="ht-payment-header">
                             <div className="ht-payment-left">
                                 <div className="ht-payment-top-label">Próximo Vencimento</div>
