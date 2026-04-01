@@ -3,7 +3,7 @@ import type { Installment } from "../../lib/types"
 
 interface HomeTabProps {
     customerName: string | null
-    stats: { paid: number; total: number; totalAmount: number }
+    stats: { paid: number; total: number; totalAmount: number; onTimeCount: number; earlyCount: number; scoredTotal: number }
     nextInstallment: Installment | undefined
     setActiveTab: (tab: 'inicio' | 'suporte' | 'carnes' | 'perfil' | 'lojas' | 'historico') => void
     setExpandedContract: (id: number | null) => void
@@ -23,11 +23,16 @@ export const HomeTab: React.FC<HomeTabProps> = ({
     const circumference = 2 * Math.PI * 15.9155
     const dashOffset = circumference - (progress / 100) * circumference
 
-    // Lógica de Nível do Cliente
+    // Nível baseado em pontualidade de pagamento
     const getCustomerLevel = () => {
-        if (stats.paid >= 10 || stats.total > 20) return { label: 'OURO', color: '#FFD700', icon: 'patch-check-fill' };
-        if (stats.paid >= 5) return { label: 'PRATA', color: '#C0C0C0', icon: 'patch-check-fill' };
-        return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check' };
+        const { onTimeCount, scoredTotal } = stats
+        if (scoredTotal === 0) {
+            return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check', description: 'Faça seu primeiro pagamento no prazo', pct: 0 }
+        }
+        const pct = Math.round((onTimeCount / scoredTotal) * 100)
+        if (pct >= 90) return { label: 'OURO', color: '#FFD700', icon: 'patch-check-fill', description: 'Pagador exemplar', pct }
+        if (pct >= 60) return { label: 'PRATA', color: '#C0C0C0', icon: 'patch-check-fill', description: 'Bom histórico de pagamentos', pct }
+        return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check', description: 'Pague em dia para subir de nível', pct }
     };
     const level = getCustomerLevel();
 
@@ -503,8 +508,25 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                             <div className="ht-card-chip"></div>
                         </div>
                         <div className="ht-card-body">
-                            <div className="ht-card-label">Status do Cliente</div>
+                            <div className="ht-card-label">Nível de Pontualidade</div>
                             <div className="ht-card-amount" style={{ color: level.color }}>{level.label}</div>
+                            {stats.scoredTotal > 0 && (
+                                <div style={{ marginTop: 6 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                                            {stats.onTimeCount} de {stats.scoredTotal} no prazo
+                                        </span>
+                                        <span style={{ fontSize: 10, fontWeight: 700, color: level.color }}>{level.pct}%</span>
+                                    </div>
+                                    <div style={{ height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 99, overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${level.pct}%`, background: level.color, borderRadius: 99, transition: 'width 0.6s ease' }} />
+                                    </div>
+                                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{level.description}</div>
+                                </div>
+                            )}
+                            {stats.scoredTotal === 0 && (
+                                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{level.description}</div>
+                            )}
                         </div>
                         <div className="ht-card-footer">
                             <div>
@@ -577,7 +599,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                                 </div>
                                 <div className="ht-payment-date">
                                     <i className="bi bi-calendar3"></i>
-                                    {new Date(nextInstallment.due_date).toLocaleDateString("pt-BR", { day: 'numeric', month: 'short' })}
+                                    {new Date(nextInstallment.due_date + "T12:00:00").toLocaleDateString("pt-BR", { day: 'numeric', month: 'short' })}
                                 </div>
                                 {nextInstallment.product_name && (
                                     <div className="ht-payment-product mt-1" style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>

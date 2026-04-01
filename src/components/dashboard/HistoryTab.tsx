@@ -26,12 +26,12 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
         .sort((a: Installment, b: Installment) => {
             const dA = a.payment_date || a.due_date
             const dB = b.payment_date || b.due_date
-            return new Date(dB).getTime() - new Date(dA).getTime()
+            return new Date(dB + "T12:00:00").getTime() - new Date(dA + "T12:00:00").getTime()
         })
 
     const grouped = new Map<string, { label: string; items: Installment[] }>()
     for (const inst of paidInstallments) {
-        const d = new Date(inst.payment_date || inst.due_date)
+        const d = new Date((inst.payment_date || inst.due_date) + "T12:00:00")
         const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`
         if (!grouped.has(key)) {
             grouped.set(key, {
@@ -426,7 +426,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                                 <div className="hy-month-items">
                                     {items.map((inst: Installment) => {
                                         const payDate = inst.payment_date || inst.due_date
-                                        const dateStr = new Date(payDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+                                        const dateStr = new Date(payDate + "T12:00:00").toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
                                         const method = (inst.payment_method || 'PIX').toUpperCase()
                                         const icon = methodIcon[method] || 'bi-receipt-cutoff'
 

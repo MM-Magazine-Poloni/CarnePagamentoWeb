@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { getSupabaseAdmin } from "../../../../services/backend/dbService"
 
 /**
@@ -43,60 +42,49 @@ export async function POST(req: Request) {
             console.log("PIX QR Code pago, chargeId:", chargeId)
 
             if (chargeId) {
-                // Atualizar payments pela provider_id (pixQrCode id)
                 const { error: payErr } = await supa
-                    .from("payments")
-                    .update({ status: "paid" })
-                    .eq("provider_id", chargeId)
-                    .eq("status", "pending")
+                    .from("PAGAMENTOS")
+                    .update({ STATUS: "paid" })
+                    .eq("PROVIDER_ID", chargeId)
+                    .neq("STATUS", "processed")
 
-                if (payErr) console.error("Erro ao atualizar payments:", payErr)
-                else console.log("Payment atualizado para paid, provider_id:", chargeId)
+                if (payErr) console.error("Erro ao atualizar PAGAMENTOS:", payErr)
+                else console.log("PAGAMENTOS atualizado para paid, PROVIDER_ID:", chargeId)
 
-                // Buscar o installment_id do payment para atualizar NVENDA
-                const { data: paymentRows } = await supa
-                    .from("payments")
-                    .select("installment_id")
-                    .eq("provider_id", chargeId)
+                // Buscar PCRNOT e FCRPAR do registro para atualizar NVENDA e FCRECEBER
+                const { data: pagRow } = await supa
+                    .from("PAGAMENTOS")
+                    .select("PCRNOT, FCRPAR, CLICOD, FBRVLR")
+                    .eq("PROVIDER_ID", chargeId)
                     .limit(1)
+                    .maybeSingle()
 
-                if (paymentRows && paymentRows.length > 0) {
-                    const installmentId = paymentRows[0].installment_id as string
-                    // installment_id tem formato "PVENUM-NPESEQ"
-                    const parts = installmentId.split("-")
-                    if (parts.length >= 2) {
-                        const pvenum = Number(parts[0])
-                        const npeseq = Number(parts[1])
-                        if (!isNaN(pvenum) && !isNaN(npeseq)) {
-                            await supa
-                                .from("NVENDA")
-                                .update({ PAGCOD: 7 })
-                                .eq("PVENUM", pvenum)
-                                .eq("NPESEQ", npeseq)
-                            console.log("NVENDA atualizado:", { pvenum, npeseq })
+                if (pagRow) {
+                    const pvenum = Number((pagRow as any).PCRNOT)
+                    const npeseq = Number((pagRow as any).FCRPAR)
+                    const wClicod = Number((pagRow as any).CLICOD)
+                    const wValor = Number((pagRow as any).FBRVLR)
 
-                            // Upsert FBCRECEBER
-                            const { data: nvRow } = await supa
-                                .from("NVENDA")
-                                .select("CLICOD, PVETPA")
-                                .eq("PVENUM", pvenum)
-                                .eq("NPESEQ", npeseq)
-                                .maybeSingle()
-                            const wClicod = nvRow ? Number((nvRow as any).CLICOD) : null
-                            const wValor = nvRow ? Number((nvRow as any).PVETPA) : 0
-                            if (wClicod) {
-                                const today = new Date().toISOString().split("T")[0]
-                                await supa.from("FBCRECEBER").upsert({
-                                    CLICOD: wClicod,
-                                    PCRNOT: pvenum,
-                                    FCRPAR: npeseq,
-                                    FBRVLR: wValor,
-                                    COBCOD: 7,
-                                    FBRPGT: today,
-                                    ACATUR: 1
-                                }, { onConflict: "PCRNOT,FCRPAR" })
-                                console.log("FBCRECEBER upserted via webhook (pix):", { pvenum, npeseq, wClicod })
-                            }
+                    if (pvenum && npeseq) {
+                        await supa
+                            .from("NVENDA")
+                            .update({ PAGCOD: 7 })
+                            .eq("PVENUM", pvenum)
+                            .eq("NPESEQ", npeseq)
+                        console.log("NVENDA atualizado:", { pvenum, npeseq })
+
+                        if (wClicod) {
+                            const today = new Date().toISOString().split("T")[0]
+                            const { error: fbcErr } = await supa.from("FCRECEBER").upsert({
+                                CLICOD: wClicod,
+                                PCRNOT: pvenum,
+                                FCRPAR: npeseq,
+                                FBRVLR: wValor,
+                                COBCOD: 7,
+                                FCRPGT: today
+                            }, { onConflict: "PCRNOT,FCRPAR" })
+                            if (fbcErr) console.error("FCRECEBER upsert error (pix):", fbcErr)
+                            else console.log("FCRECEBER upserted via webhook (pix):", { pvenum, npeseq, wClicod })
                         }
                     }
                 }
@@ -109,15 +97,16 @@ export async function POST(req: Request) {
 
             if (billingId) {
                 await supa
-                    .from("payments")
-                    .update({ status: "paid" })
-                    .eq("provider_id", billingId)
-                    .eq("status", "pending")
+                    .from("PAGAMENTOS")
+                    .update({ STATUS: "paid" })
+                    .eq("PROVIDER_ID", billingId)
+                    .neq("STATUS", "processed")
 
                 if (products && products.length > 0) {
                     for (const product of products) {
                         const externalId = product.externalId
                         if (!externalId) continue
+                        // externalId tem formato "PVENUM-NPESEQ"
                         const parts = externalId.split("-")
                         if (parts.length >= 2) {
                             const pvenum = Number(parts[0])
@@ -129,7 +118,6 @@ export async function POST(req: Request) {
                                     .eq("PVENUM", pvenum)
                                     .eq("NPESEQ", npeseq)
 
-                                // Upsert FBCRECEBER
                                 const { data: nvRow2 } = await supa
                                     .from("NVENDA")
                                     .select("CLICOD, PVETPA")
@@ -140,16 +128,16 @@ export async function POST(req: Request) {
                                 const wValor2 = nvRow2 ? Number((nvRow2 as any).PVETPA) : 0
                                 if (wClicod2) {
                                     const today = new Date().toISOString().split("T")[0]
-                                    await supa.from("FBCRECEBER").upsert({
+                                    const { error: fbcErr2 } = await supa.from("FCRECEBER").upsert({
                                         CLICOD: wClicod2,
                                         PCRNOT: pvenum,
                                         FCRPAR: npeseq,
                                         FBRVLR: wValor2,
                                         COBCOD: 7,
-                                        FBRPGT: today,
-                                        ACATUR: 1
+                                        FCRPGT: today
                                     }, { onConflict: "PCRNOT,FCRPAR" })
-                                    console.log("FBCRECEBER upserted via webhook (billing):", { pvenum, npeseq, wClicod2 })
+                                    if (fbcErr2) console.error("FCRECEBER upsert error (billing):", fbcErr2)
+                                    else console.log("FCRECEBER upserted via webhook (billing):", { pvenum, npeseq, wClicod2 })
                                 }
                             }
                         }

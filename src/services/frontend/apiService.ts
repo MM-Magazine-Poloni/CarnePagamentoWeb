@@ -36,14 +36,14 @@ export const apiService = {
     },
 
     /**
-     * Cria uma cobrança (Charge) via AbacatePay.
+     * Cria uma cobrança PIX via AbacatePay.
      */
-    async createCharge(body: { 
-        installmentId: string, 
-        amount: number, 
-        clicod: number, 
-        pvenum: number, 
-        index: number 
+    async createCharge(body: {
+        installmentId: string,
+        amount: number,
+        clicod: number,
+        pvenum: number,
+        index: number
     }) {
         const res = await fetch("/api/abacatepay/create-charge", {
             method: "POST",
@@ -54,6 +54,30 @@ export const apiService = {
         const json = await res.json()
         if (!res.ok) {
             throw new Error(json.error || "Falha ao criar QR Code PIX.")
+        }
+
+        return json
+    },
+
+    /**
+     * Cria uma cobrança Boleto via AbacatePay.
+     */
+    async createBoleto(body: {
+        installmentId: string,
+        amount: number,
+        clicod: number,
+        pvenum: number,
+        index: number
+    }) {
+        const res = await fetch("/api/abacatepay/create-boleto", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        })
+
+        const json = await res.json()
+        if (!res.ok) {
+            throw new Error(json.error || "Falha ao criar boleto.")
         }
 
         return json
