@@ -3,15 +3,18 @@ import React from "react"
 interface ProfileTabProps {
     customerName: string | null
     setActiveTab: (tab: 'inicio' | 'suporte' | 'carnes' | 'perfil' | 'lojas' | 'historico') => void
-    stats?: { paid: number; total: number; totalAmount: number }
+    stats?: { paid: number; total: number; totalAmount: number; onTimeCount: number; earlyCount: number; scoredTotal: number }
 }
 
 export const ProfileTab: React.FC<ProfileTabProps> = ({ customerName, setActiveTab, stats }) => {
     const getCustomerLevel = () => {
-        if (!stats) return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check', pct: 0 }
-        if (stats.paid >= 10 || stats.total > 20) return { label: 'OURO', color: '#FFD700', icon: 'patch-check-fill', pct: 100 }
-        if (stats.paid >= 5) return { label: 'PRATA', color: '#C0C0C0', icon: 'patch-check-fill', pct: 60 }
-        return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check', pct: 20 }
+        if (!stats || stats.scoredTotal === 0) {
+            return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check', description: 'Faça seu primeiro pagamento no prazo', pct: 0 }
+        }
+        const pct = Math.round((stats.onTimeCount / stats.scoredTotal) * 100)
+        if (pct >= 90) return { label: 'OURO', color: '#FFD700', icon: 'patch-check-fill', description: 'Pagador exemplar', pct }
+        if (pct >= 60) return { label: 'PRATA', color: '#C0C0C0', icon: 'patch-check-fill', description: 'Bom histórico de pagamentos', pct }
+        return { label: 'BRONZE', color: '#CD7F32', icon: 'patch-check', description: 'Pague em dia para subir de nível', pct }
     }
     const level = getCustomerLevel()
     const firstName = customerName ? customerName.split(' ')[0] : 'Cliente'
@@ -256,29 +259,22 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ customerName, setActiveT
                         Cliente {level.label}
                     </div>
 
-                    {stats && (
-                        <div className="pf-hero-stats">
-                            <div className="pf-stat-cell">
-                                <span className="pf-stat-lbl">Pagas</span>
-                                <span className="pf-stat-val">{String(stats.paid).padStart(2, '0')}<span style={{ color: 'rgba(255,255,255,0.2)', fontWeight: 400, fontSize: 12 }}>/{String(stats.total).padStart(2, '0')}</span></span>
-                            </div>
-                            <div className="pf-stat-cell">
-                                <span className="pf-stat-lbl">Saldo</span>
-                                <span className="pf-stat-val" style={{ fontSize: 'clamp(12px, 3.5vw, 15px)' }}>
-                                    {Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(stats.totalAmount)}
-                                </span>
-                            </div>
-                        </div>
-                    )}
-
                     <div className="pf-level-bar-wrap">
                         <div className="pf-level-bar-header">
                             <span>Nível de Pontualidade</span>
-                            <span style={{ color: level.color, fontWeight: 700 }}>{level.label}</span>
+                            <span style={{ color: level.color, fontWeight: 700 }}>{level.pct > 0 ? `${level.pct}%` : '–'}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                                {stats && stats.scoredTotal > 0
+                                    ? `${stats.onTimeCount} de ${stats.scoredTotal} no prazo`
+                                    : 'Sem histórico ainda'}
+                            </span>
                         </div>
                         <div className="pf-level-bar">
                             <div className="pf-level-bar-fill" style={{ width: `${level.pct}%`, background: level.color }} />
                         </div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 5 }}>{level.description}</div>
                     </div>
                 </div>
 
@@ -331,7 +327,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ customerName, setActiveT
                 <div className="pf-section-lbl">Ajuda</div>
                 <button
                     className="pf-btn pf-btn-tutorial"
-                    onClick={() => window.dispatchEvent(new Event("mm:start-tour"))}
+                    onClick={() => {
+                        setActiveTab('inicio')
+                        setTimeout(() => window.dispatchEvent(new Event("mm:start-tour")), 150)
+                    }}
                 >
                     <i className="bi bi-play-circle-fill"></i>
                     Ver tutorial novamente
@@ -347,7 +346,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ customerName, setActiveT
                 {/* Footer */}
                 <div className="pf-footer">
                     <div className="pf-footer-brand">MM Magazine Digital</div>
-                    <div className="pf-footer-version">Versão 3.4.12</div>
+                    <div className="pf-footer-version">Versão 1.0.0</div>
                 </div>
             </div>
         </>

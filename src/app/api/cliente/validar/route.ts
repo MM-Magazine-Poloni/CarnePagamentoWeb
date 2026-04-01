@@ -1,8 +1,8 @@
 /**
  * POST /api/cliente/validar
- * Valida os últimos 3 dígitos do CPF e emite um sessionToken assinado.
+ * Valida os 4 primeiros dígitos do CPF e emite um sessionToken assinado.
  *
- * Body: { token: string, cpfFinal: string (3 dígitos) }
+ * Body: { token: string, cpfFinal: string (4 dígitos) }
  * Resposta sucesso: { autorizado: true, sessionToken: string }
  * Resposta falha:   { autorizado: false }
  */
@@ -28,9 +28,9 @@ export async function POST(req: Request) {
         if (!token || typeof token !== "string" || token.length < 4) {
             return NextResponse.json({ autorizado: false }, { status: 400 })
         }
-        if (!/^\d{3}$/.test(cpfFinal)) {
+        if (!/^\d{4}$/.test(cpfFinal)) {
             return NextResponse.json(
-                { autorizado: false, error: "cpfFinal deve conter exatamente 3 dígitos." },
+                { autorizado: false, error: "cpfFinal deve conter exatamente 4 dígitos." },
                 { status: 400 }
             )
         }
@@ -55,11 +55,11 @@ export async function POST(req: Request) {
             return NextResponse.json({ autorizado: false })
         }
 
-        // ── Compara os últimos 3 dígitos do CPF ──────────────────────────────────
+        // ── Compara os 4 primeiros dígitos do CPF ────────────────────────────────
         const cpfDigits = digitsOnly((cliente as any).CLICGC)
-        const lastThree = cpfDigits.slice(-3)
+        const firstFour = cpfDigits.slice(0, 4)
 
-        if (!lastThree || lastThree !== cpfFinal) {
+        if (!firstFour || firstFour !== cpfFinal) {
             return NextResponse.json({ autorizado: false })
         }
 

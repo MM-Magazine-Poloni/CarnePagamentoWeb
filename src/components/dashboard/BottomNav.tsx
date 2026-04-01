@@ -7,10 +7,10 @@ interface BottomNavProps {
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
     const items = [
-        { key: 'inicio' as const, icon: 'house-door', label: 'Início' },
-        { key: 'carnes' as const, icon: 'collection', label: 'Carnês' },
-        { key: 'historico' as const, icon: 'clock-history', label: 'Histórico' },
-        { key: 'perfil' as const, icon: 'person', label: 'Perfil' },
+        { key: 'inicio' as const, icon: 'house-door', iconActive: 'house-door-fill', label: 'Início' },
+        { key: 'carnes' as const, icon: 'collection', iconActive: 'collection-fill', label: 'Carnês' },
+        { key: 'historico' as const, icon: 'clock-history', iconActive: 'clock-history', label: 'Histórico' },
+        { key: 'perfil' as const, icon: 'person', iconActive: 'person-fill', label: 'Perfil' },
     ]
 
     return (
@@ -131,7 +131,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
                                 {...(item.key === 'carnes' ? { 'data-tour': 'carnes-nav' } : {})}
                             >
                                 <div className="bn-icon-wrap">
-                                    <i className={`bi bi-${item.icon}${isActive ? '-fill' : ''}`}></i>
+                                    <i className={`bi bi-${isActive ? item.iconActive : item.icon}`}></i>
                                 </div>
                                 <span className="bn-label">{item.label}</span>
                             </button>

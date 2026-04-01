@@ -510,23 +510,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                         <div className="ht-card-body">
                             <div className="ht-card-label">Nível de Pontualidade</div>
                             <div className="ht-card-amount" style={{ color: level.color }}>{level.label}</div>
-                            {stats.scoredTotal > 0 && (
-                                <div style={{ marginTop: 6 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                                            {stats.onTimeCount} de {stats.scoredTotal} no prazo
-                                        </span>
-                                        <span style={{ fontSize: 10, fontWeight: 700, color: level.color }}>{level.pct}%</span>
-                                    </div>
-                                    <div style={{ height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 99, overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', width: `${level.pct}%`, background: level.color, borderRadius: 99, transition: 'width 0.6s ease' }} />
-                                    </div>
-                                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{level.description}</div>
-                                </div>
-                            )}
-                            {stats.scoredTotal === 0 && (
-                                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{level.description}</div>
-                            )}
+                            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{level.description}</div>
                         </div>
                         <div className="ht-card-footer">
                             <div>

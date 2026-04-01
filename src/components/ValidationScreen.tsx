@@ -9,14 +9,15 @@ interface ValidationScreenProps {
 }
 
 export default function ValidationScreen({ token, onValidated, expired = false }: ValidationScreenProps) {
-    const [digits, setDigits] = useState<string[]>(["", "", ""])
+    const [digits, setDigits] = useState<string[]>(["", "", "", ""])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(expired ? "Sua sessão expirou. Confirme novamente." : null)
     const [shake, setShake] = useState(false)
     const ref0 = useRef<HTMLInputElement>(null)
     const ref1 = useRef<HTMLInputElement>(null)
     const ref2 = useRef<HTMLInputElement>(null)
-    const inputRefs = [ref0, ref1, ref2]
+    const ref3 = useRef<HTMLInputElement>(null)
+    const inputRefs = [ref0, ref1, ref2, ref3]
 
     useEffect(() => {
         inputRefs[0].current?.focus()
@@ -28,10 +29,10 @@ export default function ValidationScreen({ token, onValidated, expired = false }
         next[idx] = value
         setDigits(next)
         setError(null)
-        if (value && idx < 2) {
+        if (value && idx < 3) {
             inputRefs[idx + 1].current?.focus()
         }
-        if (next.every(d => d !== "") && idx === 2) {
+        if (next.every(d => d !== "") && idx === 3) {
             submit(next.join(""))
         }
     }
@@ -43,17 +44,17 @@ export default function ValidationScreen({ token, onValidated, expired = false }
     }
 
     const handlePaste = (e: React.ClipboardEvent) => {
-        const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 3)
-        if (pasted.length === 3) {
+        const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4)
+        if (pasted.length === 4) {
             const next = pasted.split("")
             setDigits(next)
-            inputRefs[2].current?.focus()
+            inputRefs[3].current?.focus()
             submit(pasted)
         }
     }
 
     const submit = async (cpfFinal: string) => {
-        if (cpfFinal.length !== 3 || loading) return
+        if (cpfFinal.length !== 4 || loading) return
         setLoading(true)
         setError(null)
 
@@ -172,18 +173,18 @@ export default function ValidationScreen({ token, onValidated, expired = false }
 
                 .vs-digits {
                     display: flex;
-                    gap: 12px;
+                    gap: 10px;
                     justify-content: center;
                     margin-bottom: 12px;
                 }
                 .vs-digit-input {
-                    width: 70px; height: 72px;
+                    width: 62px; height: 68px;
                     background: rgba(255,255,255,0.04);
                     border: 1.5px solid rgba(255,255,255,0.1);
                     border-radius: 16px;
                     text-align: center;
                     font-family: 'Syne', sans-serif;
-                    font-size: 28px;
+                    font-size: 26px;
                     font-weight: 700;
                     color: #fff;
                     caret-color: #E31A2D;
@@ -268,8 +269,14 @@ export default function ValidationScreen({ token, onValidated, expired = false }
                 @keyframes vsSpin { to { transform: rotate(360deg); } }
 
                 @media (max-width: 380px) {
-                    .vs-card { padding: 28px 20px 28px; }
-                    .vs-digit-input { width: 62px; height: 64px; font-size: 24px; }
+                    .vs-card { padding: 28px 18px 28px; }
+                    .vs-digits { gap: 8px; }
+                    .vs-digit-input { width: 54px; height: 60px; font-size: 22px; border-radius: 14px; }
+                }
+                @media (max-width: 320px) {
+                    .vs-card { padding: 24px 14px 24px; }
+                    .vs-digits { gap: 6px; }
+                    .vs-digit-input { width: 48px; height: 54px; font-size: 20px; border-radius: 12px; }
                 }
             `}</style>
 
@@ -288,7 +295,7 @@ export default function ValidationScreen({ token, onValidated, expired = false }
 
                     <div className="vs-title">Confirme sua identidade</div>
                     <div className="vs-subtitle">
-                        Digite os <strong style={{ color: "rgba(255,255,255,0.7)" }}>3 últimos dígitos</strong><br />
+                        Digite os <strong style={{ color: "rgba(255,255,255,0.7)" }}>4 primeiros dígitos</strong><br />
                         do seu CPF para acessar
                     </div>
 
