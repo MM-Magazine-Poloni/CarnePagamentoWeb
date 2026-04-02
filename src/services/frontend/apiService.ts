@@ -80,7 +80,10 @@ export const apiService = {
 
         const json = await res.json()
         if (!res.ok) {
-            throw new Error(json.error || "Falha ao criar QR Code PIX.")
+            const err = new Error(json.error || "Falha ao criar QR Code PIX.")
+            // Propaga flag para que PaymentScreen detecte parcela já paga
+            if (res.status === 409 && json.alreadyPaid) (err as any).alreadyPaid = true
+            throw err
         }
 
         return json
@@ -104,7 +107,9 @@ export const apiService = {
 
         const json = await res.json()
         if (!res.ok) {
-            throw new Error(json.error || "Falha ao criar boleto.")
+            const err = new Error(json.error || "Falha ao criar boleto.")
+            if (res.status === 409 && json.alreadyPaid) (err as any).alreadyPaid = true
+            throw err
         }
 
         return json

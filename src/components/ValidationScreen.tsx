@@ -65,14 +65,14 @@ export default function ValidationScreen({ token, onValidated, expired = false }
                 onValidated(result.sessionToken)
             } else {
                 setError("CPF incorreto. Tente novamente.")
-                setDigits(["", "", ""])
+                setDigits(["", "", "", ""])
                 setShake(true)
                 setTimeout(() => setShake(false), 600)
                 setTimeout(() => inputRefs[0].current?.focus(), 50)
             }
         } catch {
             setError("Erro de conexão. Tente novamente.")
-            setDigits(["", "", ""])
+            setDigits(["", "", "", ""])
             setTimeout(() => inputRefs[0].current?.focus(), 50)
         } finally {
             setLoading(false)
