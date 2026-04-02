@@ -5,6 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import type { Installment, InstallmentStatus } from "../../../lib/types"
 import { apiService } from "../../../services/frontend/apiService"
+import { supabase } from "../../../lib/supabaseClient"
 
 const ValidationScreen = dynamic(
   () => import("../../../components/ValidationScreen"),
@@ -121,6 +122,59 @@ export default function ClienteContratosPage() {
     load()
     return () => { mounted = false }
   }, [sessionToken, publicToken])
+
+  // ── Supabase Realtime: sincronização entre dispositivos ───────────────────
+  // Escuta a tabela PAGAMENTOS para o cliente atual.
+  // Quando um pagamento é confirmado em qualquer dispositivo (PC, celular etc.),
+  // a lista de parcelas é atualizada automaticamente sem precisar recarregar.
+  useEffect(() => {
+    // Extrair CLICOD do primeiro contrato carregado (definido apenas uma vez)
+    const clicod = contracts.flatMap((c: ContractWithInstallments) => c.installments)[0]?.clicod
+    if (!clicod || !sessionToken) return
+
+    const channel = supabase
+      .channel(`dashboard-pagamentos-${clicod}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "PAGAMENTOS",
+          // Filtra por CLICOD para receber apenas mudanças deste cliente
+          filter: `CLICOD=eq.${clicod}`
+        },
+        (payload: any) => {
+          const row = payload.new
+          // Só processar quando o status mudar para pago ou processado
+          if (row.STATUS !== "paid" && row.STATUS !== "processed") return
+
+          const pvenum = Number(row.PCRNOT)
+          const fcrpar = Number(row.FCRPAR)
+
+          console.log("[Realtime] Atualizando parcela paga:", pvenum, fcrpar)
+
+          // Atualizar status da parcela correspondente em todos os contratos
+          setContracts((prev: ContractWithInstallments[]) =>
+            prev.map((c: ContractWithInstallments) => ({
+              ...c,
+              installments: c.installments.map((i: Installment) =>
+                Number(i.pcrnot) === pvenum && Number(i.index) === fcrpar
+                  ? { ...i, status: "pago" as InstallmentStatus }
+                  : i
+              )
+            }))
+          )
+        }
+      )
+      .subscribe()
+
+    // Cleanup: remover subscription ao deslogar ou recarregar contratos
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  // Só recriar quando os contratos são carregados pela primeira vez
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contracts.length > 0, sessionToken])
 
   // ── Callback chamado pelo ValidationScreen após CPF correto ──────────────
   const handleValidated = useCallback((token: string) => {
