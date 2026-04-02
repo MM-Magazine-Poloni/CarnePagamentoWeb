@@ -21,6 +21,7 @@ export default function ValidationScreen({ token, onValidated, expired = false }
 
     useEffect(() => {
         inputRefs[0].current?.focus()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const handleChange = (idx: number, value: string) => {

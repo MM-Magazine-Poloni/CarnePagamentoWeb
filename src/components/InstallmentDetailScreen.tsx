@@ -47,6 +47,7 @@ export default function InstallmentDetailScreen({
     const currency = (v: number) => Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)
 
     // ── Canvas-based receipt image ────────────────────────────────────────────
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const buildReceiptCanvas = useCallback((): HTMLCanvasElement => {
         const W = 390
         const rows: [string, string][] = [

@@ -102,6 +102,7 @@ export default function PaymentScreen({
         return () => {
             if (timerRef.current) clearInterval(timerRef.current)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chargeBody])
 
     // --- Atualiza a UI quando o pagamento é confirmado ---

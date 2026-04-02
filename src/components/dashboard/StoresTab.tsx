@@ -468,7 +468,7 @@ export const StoresTab: React.FC<StoresTabProps> = ({ setActiveTab }) => {
                 </div>
 
                 <p className="st-hint">
-                    Toque em "Como Chegar" para abrir a rota no Google Maps
+                    Toque em &ldquo;Como Chegar&rdquo; para abrir a rota no Google Maps
                 </p>
             </div>
         </>
