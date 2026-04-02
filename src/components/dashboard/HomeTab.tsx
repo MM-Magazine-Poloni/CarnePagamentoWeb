@@ -550,28 +550,6 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                     </div>
                 </div>
 
-                {/* Stats */}
-                <div className="ht-stats">
-                    <div className="ht-stat">
-                        <div className="ht-stat-icon" style={{ color: '#818CF8' }}>
-                            <i className="bi bi-wallet2"></i>
-                        </div>
-                        <div className="ht-stat-label">Saldo Total</div>
-                        <div className="ht-stat-value">
-                            {Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(stats.totalAmount)}
-                        </div>
-                    </div>
-                    <div className="ht-stat">
-                        <div className="ht-stat-icon" style={{ color: '#E31A2D' }}>
-                            <i className="bi bi-calendar-event"></i>
-                        </div>
-                        <div className="ht-stat-label">Parcelas</div>
-                        <div className="ht-stat-value">
-                            {String(stats.paid).padStart(2, '0')}<span style={{ color: 'rgba(255,255,255,0.25)', fontWeight: 400 }}> / </span>{String(stats.total).padStart(2, '0')}
-                        </div>
-                    </div>
-                </div>
-
                 {/* Next Payment */}
                 {nextInstallment && (
                     <div className="ht-payment" data-tour="next-payment">

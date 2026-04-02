@@ -105,19 +105,35 @@ export async function POST(req: Request) {
                 }
 
                 const todayDateOnly = new Date().toISOString().split("T")[0]
-                const { error: fbcErr } = await supa
-                        .from("FCRECEBER")
-                        .upsert({
-                            CLICOD: finalClicod,
-                            PCRNOT: pvenum,
-                            FCRPAR: npeseq,
-                            FBRVLR: fbrvlr,
-                            COBCOD: cobcod,
-                            FCRPGT: todayDateOnly
-                        }, { onConflict: "PCRNOT,FCRPAR" })
 
-                    if (fbcErr) console.error("mark-paid FCRECEBER error:", fbcErr)
-                    else console.log("mark-paid FCRECEBER upserted:", { pvenum, npeseq, finalClicod })
+                // UPDATE primeiro — mais seguro que upsert pois não depende de
+                // um UNIQUE constraint específico na tabela FCRECEBER.
+                // Filtra por CLICOD+PCRNOT+FCRPAR para garantir precisão.
+                const { data: updRows, error: updErr } = await supa
+                    .from("FCRECEBER")
+                    .update({ FCRPGT: todayDateOnly, COBCOD: cobcod })
+                    .eq("CLICOD", finalClicod)
+                    .eq("PCRNOT", pvenum)
+                    .eq("FCRPAR", npeseq)
+                    .select("FCRPAR")
+
+                if (updErr) {
+                    console.error("mark-paid FCRECEBER update error:", updErr)
+                } else if (!updRows || updRows.length === 0) {
+                    // Linha não existe ainda — inserir registro novo
+                    const { error: insErr } = await supa.from("FCRECEBER").insert({
+                        CLICOD: finalClicod,
+                        PCRNOT: pvenum,
+                        FCRPAR: npeseq,
+                        FBRVLR: fbrvlr,
+                        COBCOD: cobcod,
+                        FCRPGT: todayDateOnly
+                    })
+                    if (insErr) console.error("mark-paid FCRECEBER insert error:", insErr)
+                    else console.log("mark-paid FCRECEBER inserido:", { pvenum, npeseq, finalClicod })
+                } else {
+                    console.log("mark-paid FCRECEBER atualizado:", { pvenum, npeseq, finalClicod })
+                }
             }
         }
 

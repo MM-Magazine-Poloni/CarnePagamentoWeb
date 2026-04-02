@@ -496,26 +496,40 @@ export default function InstallmentDetailScreen({
     // ─────────────────────────────────────────────────────────────────────────
     // UNPAID LAYOUT — pending or late
     // ─────────────────────────────────────────────────────────────────────────
-    const accentHex = isLate ? "#E31A2D" : "#6366F1"
-    const accentDim = isLate ? "rgba(227,26,45,0.15)" : "rgba(99,102,241,0.12)"
-    const accentBorder = isLate ? "rgba(227,26,45,0.3)" : "rgba(99,102,241,0.25)"
-    const heroGrad = isLate
-        ? "linear-gradient(135deg, #1C0A0F 0%, #2A0D15 50%, #180508 100%)"
-        : "linear-gradient(135deg, #0e0e1a 0%, #14143a 50%, #0a0a1c 100%)"
+    const accentHex = "#E31A2D"
+    const accentDim = "rgba(227,26,45,0.12)"
+    const accentBorder = "rgba(227,26,45,0.25)"
+    const heroGrad = "linear-gradient(135deg, #1C0A0F 0%, #2A0D15 50%, #180508 100%)"
 
     return (
         <div ref={scrollContainerRef} className="detail-screen" style={{ background: "#0A0A0C" }}>
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+                @keyframes ds-fadeSlide {
+                    from { opacity: 0; transform: translateY(18px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes ds-pulse-red {
+                    0%, 100% { box-shadow: 0 0 0 0 rgba(227,26,45,0.4); }
+                    50%      { box-shadow: 0 0 0 8px rgba(227,26,45,0);  }
+                }
+                @keyframes ds-shimmer {
+                    0%   { background-position: -200% center; }
+                    100% { background-position:  200% center; }
+                }
+
                 .ds-root { font-family: 'DM Sans', sans-serif; }
+
+                /* ── Header ── */
                 .ds-unpaid-header {
                     display: flex; align-items: center; justify-content: space-between;
                     padding: 52px 20px 16px; position: sticky; top: 0; z-index: 10;
                     background: #0A0A0C;
                 }
                 .ds-unpaid-header::before {
-                    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 130px;
-                    background: radial-gradient(ellipse 80% 100% at 50% -20%, ${isLate ? "rgba(227,26,45,0.18)" : "rgba(99,102,241,0.12)"} 0%, transparent 70%);
+                    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 160px;
+                    background: radial-gradient(ellipse 90% 100% at 50% -10%, rgba(227,26,45,0.2) 0%, transparent 70%);
                     pointer-events: none;
                 }
                 .ds-icon-btn {
@@ -532,134 +546,197 @@ export default function InstallmentDetailScreen({
                     font-weight: 700; color: #fff; position: relative;
                 }
 
-                /* Value hero */
+                /* ── Value hero ── */
                 .ds-value-hero {
-                    margin: 0 16px 16px;
-                    background: ${heroGrad};
-                    border: 1px solid ${accentBorder};
-                    border-radius: 20px; padding: 22px 20px;
+                    margin: 0 16px 14px;
+                    background: linear-gradient(135deg, #1C0A0F 0%, #2E0D17 45%, #180508 100%);
+                    border: 1px solid rgba(227,26,45,0.28);
+                    border-radius: 24px; padding: 24px 22px;
                     position: relative; overflow: hidden;
-                    box-shadow: 0 14px 40px rgba(0,0,0,0.5);
+                    box-shadow: 0 20px 50px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.03) inset;
+                    animation: ds-fadeSlide 0.35s ease both;
                 }
-                .ds-value-hero::before {
-                    content: ''; position: absolute; top: -30px; right: -30px;
-                    width: 130px; height: 130px; border-radius: 50%;
-                    background: ${accentDim}; pointer-events: none;
+                /* grade sutil */
+                .ds-value-hero::after {
+                    content: ''; position: absolute; inset: 0;
+                    background-image:
+                        linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+                    background-size: 28px 28px;
+                    pointer-events: none;
                 }
+                /* glow top-right */
+                .ds-hero-glow {
+                    position: absolute; top: -50px; right: -50px;
+                    width: 180px; height: 180px; border-radius: 50%;
+                    background: radial-gradient(circle, rgba(227,26,45,0.22) 0%, transparent 65%);
+                    pointer-events: none;
+                }
+                /* glow bottom-left */
+                .ds-hero-glow2 {
+                    position: absolute; bottom: -40px; left: -40px;
+                    width: 140px; height: 140px; border-radius: 50%;
+                    background: radial-gradient(circle, rgba(227,26,45,0.1) 0%, transparent 65%);
+                    pointer-events: none;
+                }
+                .ds-vh-inner { position: relative; z-index: 1; }
                 .ds-vh-top {
                     display: flex; justify-content: space-between;
-                    align-items: flex-start; margin-bottom: 16px; position: relative; z-index: 1;
+                    align-items: flex-start; margin-bottom: 18px;
                 }
                 .ds-vh-parcela-lbl {
-                    font-size: 10px; font-weight: 700; letter-spacing: 2px;
-                    text-transform: uppercase; color: rgba(255,255,255,0.4); margin-bottom: 4px;
+                    font-size: 10px; font-weight: 600; letter-spacing: 2.5px;
+                    text-transform: uppercase; color: rgba(255,255,255,0.35); margin-bottom: 5px;
                 }
                 .ds-vh-parcela-val {
-                    font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800;
+                    font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800;
                     color: #fff; line-height: 1;
                 }
-                .ds-vh-parcela-val span { font-size: 14px; color: rgba(255,255,255,0.4); font-weight: 500; }
+                .ds-vh-parcela-val span { font-size: 15px; color: rgba(255,255,255,0.35); font-weight: 400; margin-left: 2px; }
+
+                /* status pill */
                 .ds-vh-status-pill {
-                    display: inline-flex; align-items: center; gap: 5px;
-                    padding: 5px 12px; border-radius: 999px;
-                    background: ${accentDim}; border: 1px solid ${accentBorder};
+                    display: inline-flex; align-items: center; gap: 6px;
+                    padding: 6px 13px; border-radius: 999px;
+                    background: rgba(227,26,45,0.15); border: 1px solid rgba(227,26,45,0.3);
                     font-size: 11px; font-weight: 700; white-space: nowrap;
-                    color: ${isLate ? "#FC8181" : "rgba(255,255,255,0.8)"};
+                    color: #FC8181;
                 }
+                .ds-vh-status-dot {
+                    width: 6px; height: 6px; border-radius: 50%;
+                    background: #E31A2D;
+                    ${isLate ? "animation: ds-pulse-red 1.8s ease infinite;" : ""}
+                }
+
+                /* amount */
                 .ds-vh-amount-lbl {
-                    font-size: 10px; font-weight: 700; letter-spacing: 2px;
-                    text-transform: uppercase; color: rgba(255,255,255,0.45);
-                    margin-bottom: 4px; position: relative; z-index: 1;
+                    font-size: 10px; font-weight: 600; letter-spacing: 2px;
+                    text-transform: uppercase; color: rgba(255,255,255,0.4);
+                    margin-bottom: 6px;
                 }
                 .ds-vh-amount {
                     font-family: 'Syne', sans-serif;
-                    font-size: clamp(28px, 9vw, 38px); font-weight: 800;
-                    color: #fff; letter-spacing: -1.5px; line-height: 1;
-                    position: relative; z-index: 1;
+                    font-size: clamp(30px, 9vw, 40px); font-weight: 800;
+                    color: #fff; letter-spacing: -2px; line-height: 1;
                 }
                 .ds-vh-fine {
-                    font-size: 11px; color: #FC8181; margin-top: 4px; position: relative; z-index: 1;
+                    font-size: 11px; color: #FC8181; margin-top: 5px;
+                    display: flex; align-items: center; gap: 5px;
+                }
+                .ds-vh-divider {
+                    height: 1px; background: rgba(255,255,255,0.08); margin: 16px 0;
                 }
                 .ds-vh-due {
                     display: flex; justify-content: space-between; align-items: center;
-                    margin-top: 14px; padding-top: 12px;
-                    border-top: 1px solid rgba(255,255,255,0.1);
-                    position: relative; z-index: 1;
                 }
-                .ds-vh-due-lbl { font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 500; }
+                .ds-vh-due-lbl {
+                    font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 500;
+                    display: flex; align-items: center; gap: 5px;
+                }
                 .ds-vh-due-val {
                     font-size: 13px; font-weight: 700;
-                    color: ${isLate ? "#FC8181" : "rgba(255,255,255,0.85)"};
+                    color: ${isLate ? "#FC8181" : "rgba(255,255,255,0.9)"};
                 }
 
-                /* Info grid */
-                .ds-info-grid {
+                /* ── Info row (3 chips) ── */
+                .ds-info-row {
                     display: grid; grid-template-columns: repeat(3, 1fr);
-                    gap: 8px; margin: 0 16px 16px;
+                    gap: 8px; margin: 0 16px 14px;
+                    animation: ds-fadeSlide 0.35s ease 0.08s both;
                 }
-                .ds-info-cell {
+                .ds-info-chip {
                     background: #111114; border: 1px solid rgba(255,255,255,0.07);
                     border-radius: 14px; padding: 12px 10px; text-align: center;
+                    transition: border-color 0.2s;
                 }
-                .ds-info-cell-lbl {
+                .ds-info-chip:hover { border-color: rgba(227,26,45,0.25); }
+                .ds-info-chip-lbl {
                     font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
-                    text-transform: uppercase; color: rgba(255,255,255,0.35); margin-bottom: 4px;
+                    text-transform: uppercase; color: rgba(255,255,255,0.28); margin-bottom: 5px;
                 }
-                .ds-info-cell-val {
+                .ds-info-chip-val {
                     font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.85);
                 }
 
-                /* Product mini-card */
+                /* ── Product strip ── */
                 .ds-product-strip {
                     display: flex; align-items: center; gap: 12px;
-                    margin: 0 16px 20px; padding: 14px 16px;
+                    margin: 0 16px 16px; padding: 14px 16px;
                     background: #111114; border: 1px solid rgba(255,255,255,0.07);
                     border-radius: 16px;
+                    animation: ds-fadeSlide 0.35s ease 0.14s both;
                 }
                 .ds-strip-icon {
-                    width: 38px; height: 38px; border-radius: 10px;
-                    background: rgba(227,26,45,0.1); border: 1px solid rgba(227,26,45,0.15);
+                    width: 42px; height: 42px; border-radius: 12px;
+                    background: rgba(227,26,45,0.1); border: 1px solid rgba(227,26,45,0.2);
                     display: flex; align-items: center; justify-content: center;
-                    font-size: 16px; color: #E31A2D; flex-shrink: 0;
+                    font-size: 17px; color: #E31A2D; flex-shrink: 0;
                 }
-                .ds-strip-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85); }
-                .ds-strip-order { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+                .ds-strip-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.88); line-height: 1.3; }
+                .ds-strip-order { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 2px; font-family: monospace; }
 
-                /* CTA footer */
+                /* ── Late warning banner ── */
+                .ds-late-banner {
+                    display: flex; align-items: center; gap: 10px;
+                    margin: 0 16px 14px; padding: 12px 14px;
+                    background: rgba(227,26,45,0.08); border: 1px solid rgba(227,26,45,0.2);
+                    border-radius: 14px;
+                    animation: ds-fadeSlide 0.35s ease 0.18s both;
+                }
+                .ds-late-icon {
+                    width: 32px; height: 32px; border-radius: 9px;
+                    background: rgba(227,26,45,0.15); display: flex; align-items: center;
+                    justify-content: center; font-size: 14px; color: #FC8181; flex-shrink: 0;
+                }
+                .ds-late-text { font-size: 12px; color: rgba(255,255,255,0.55); line-height: 1.5; }
+                .ds-late-text strong { color: #FC8181; font-weight: 600; }
+
+                /* ── CTA footer ── */
                 .ds-cta-footer {
                     position: sticky; bottom: 0;
-                    background: linear-gradient(to top, #0A0A0C 80%, transparent);
-                    padding: 20px 16px 28px;
+                    background: linear-gradient(to top, #0A0A0C 75%, transparent);
+                    padding: 20px 16px 30px;
+                    animation: ds-fadeSlide 0.35s ease 0.22s both;
                 }
-                .ds-cta-amount-row {
+                .ds-cta-row {
                     display: flex; justify-content: space-between; align-items: center;
-                    margin-bottom: 12px;
+                    margin-bottom: 12px; padding: 0 2px;
                 }
-                .ds-cta-amount-lbl { font-size: 12px; color: rgba(255,255,255,0.45); font-weight: 500; }
-                .ds-cta-amount-val {
+                .ds-cta-lbl { font-size: 12px; color: rgba(255,255,255,0.4); font-weight: 500; }
+                .ds-cta-val {
                     font-family: 'Syne', sans-serif; font-size: 20px;
                     font-weight: 800; color: #fff;
                 }
                 .ds-pay-btn {
-                    width: 100%; padding: 16px; border-radius: 16px;
-                    background: ${accentHex}; color: #fff; font-weight: 700;
-                    font-size: 14px; letter-spacing: 0.5px; border: none; cursor: pointer;
-                    display: flex; align-items: center; justify-content: center; gap: 8px;
+                    width: 100%; padding: 17px; border-radius: 16px;
+                    background: #E31A2D; color: #fff; font-weight: 700;
+                    font-size: 15px; letter-spacing: 0.4px; border: none; cursor: pointer;
+                    display: flex; align-items: center; justify-content: center; gap: 9px;
                     font-family: 'DM Sans', sans-serif;
-                    box-shadow: 0 8px 24px ${isLate ? "rgba(227,26,45,0.3)" : "rgba(99,102,241,0.3)"};
+                    box-shadow: 0 8px 28px rgba(227,26,45,0.4);
                     transition: transform 0.15s, box-shadow 0.15s;
+                    position: relative; overflow: hidden;
                 }
-                .ds-pay-btn:active { transform: scale(0.97); box-shadow: none; }
+                /* shimmer no botão */
+                .ds-pay-btn::after {
+                    content: '';
+                    position: absolute; inset: 0;
+                    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%);
+                    background-size: 200% 100%;
+                    animation: ds-shimmer 2.5s linear infinite;
+                }
+                .ds-pay-btn:active { transform: scale(0.97); box-shadow: 0 4px 14px rgba(227,26,45,0.3); }
                 .ds-secure-note {
                     text-align: center; margin-top: 10px; font-size: 11px;
-                    color: rgba(255,255,255,0.3);
+                    color: rgba(255,255,255,0.25);
                 }
 
                 @media (max-width: 360px) {
-                    .ds-unpaid-header { padding: 40px 16px 14px; }
-                    .ds-value-hero, .ds-product-strip { margin-left: 12px; margin-right: 12px; }
-                    .ds-info-grid { margin: 0 12px 14px; }
-                    .ds-cta-footer { padding: 16px 12px 24px; }
+                    .ds-unpaid-header { padding: 40px 14px 14px; }
+                    .ds-value-hero, .ds-product-strip, .ds-late-banner { margin-left: 12px; margin-right: 12px; }
+                    .ds-info-row { margin: 0 12px 12px; }
+                    .ds-cta-footer { padding: 16px 12px 26px; }
+                    .ds-vh-amount { font-size: clamp(26px, 9vw, 34px); }
                 }
             `}</style>
 
@@ -677,45 +754,53 @@ export default function InstallmentDetailScreen({
 
                 {/* Value hero */}
                 <div className="ds-value-hero">
-                    <div className="ds-vh-top">
-                        <div>
-                            <div className="ds-vh-parcela-lbl">Parcela</div>
-                            <div className="ds-vh-parcela-val">
-                                {String(installment.index).padStart(2, "0")}
-                                <span> / {String(installment.count).padStart(2, "0")}</span>
+                    <div className="ds-hero-glow"></div>
+                    <div className="ds-hero-glow2"></div>
+                    <div className="ds-vh-inner">
+                        <div className="ds-vh-top">
+                            <div>
+                                <div className="ds-vh-parcela-lbl">Parcela</div>
+                                <div className="ds-vh-parcela-val">
+                                    {String(installment.index).padStart(2, "0")}
+                                    <span>/ {String(installment.count).padStart(2, "0")}</span>
+                                </div>
+                            </div>
+                            <div className="ds-vh-status-pill">
+                                <span className="ds-vh-status-dot"></span>
+                                {isLate
+                                    ? `${daysOverdue} dia${daysOverdue !== 1 ? "s" : ""} em atraso`
+                                    : "Em aberto"}
                             </div>
                         </div>
-                        <div className="ds-vh-status-pill">
-                            <i className={`bi ${isLate ? "bi-exclamation-triangle-fill" : "bi-clock-fill"}`}
-                                style={{ fontSize: 10 }}></i>
-                            {isLate
-                                ? `${daysOverdue} dia${daysOverdue !== 1 ? "s" : ""} em atraso`
-                                : "Em aberto"}
+                        <div className="ds-vh-amount-lbl">Valor a pagar</div>
+                        <div className="ds-vh-amount">{currency(totalAmount)}</div>
+                        {installment.fine_amount ? (
+                            <div className="ds-vh-fine">
+                                <i className="bi bi-exclamation-circle" style={{ fontSize: 11 }}></i>
+                                Inclui {currency(installment.fine_amount)} de multa/juros
+                            </div>
+                        ) : null}
+                        <div className="ds-vh-divider"></div>
+                        <div className="ds-vh-due">
+                            <span className="ds-vh-due-lbl">
+                                <i className="bi bi-calendar3"></i>
+                                {isLate ? "Venceu em" : "Vencimento"}
+                            </span>
+                            <span className="ds-vh-due-val">{dueLong}</span>
                         </div>
-                    </div>
-                    <div className="ds-vh-amount-lbl">Valor a pagar</div>
-                    <div className="ds-vh-amount">{currency(totalAmount)}</div>
-                    {installment.fine_amount ? (
-                        <div className="ds-vh-fine">
-                            Inclui {currency(installment.fine_amount)} de multa/juros
-                        </div>
-                    ) : null}
-                    <div className="ds-vh-due">
-                        <span className="ds-vh-due-lbl">{isLate ? "Venceu em" : "Vencimento"}</span>
-                        <span className="ds-vh-due-val">{dueLong}</span>
                     </div>
                 </div>
 
-                {/* Info grid */}
-                <div className="ds-info-grid">
+                {/* Info chips */}
+                <div className="ds-info-row">
                     {[
                         ["Contrato", String(installment.pcrnot || "—")],
-                        ["Data compra", fmt(installment.purchase_date)],
-                        ["Vencimento", fmt(installment.due_date)],
+                        ["Compra", fmt(installment.purchase_date)],
+                        ["Vence", fmt(installment.due_date)],
                     ].map(([lbl, val]) => (
-                        <div key={lbl} className="ds-info-cell">
-                            <div className="ds-info-cell-lbl">{lbl}</div>
-                            <div className="ds-info-cell-val">{val}</div>
+                        <div key={lbl} className="ds-info-chip">
+                            <div className="ds-info-chip-lbl">{lbl}</div>
+                            <div className="ds-info-chip-val">{val}</div>
                         </div>
                     ))}
                 </div>
@@ -731,14 +816,25 @@ export default function InstallmentDetailScreen({
                     </div>
                 </div>
 
-                {/* Spacer */}
+                {/* Banner de atraso */}
+                {isLate && (
+                    <div className="ds-late-banner">
+                        <div className="ds-late-icon">
+                            <i className="bi bi-clock-history"></i>
+                        </div>
+                        <div className="ds-late-text">
+                            Esta parcela está <strong>{daysOverdue} dia{daysOverdue !== 1 ? "s" : ""} em atraso</strong>. Regularize agora para evitar novos encargos.
+                        </div>
+                    </div>
+                )}
+
                 <div style={{ flex: 1 }} />
 
                 {/* CTA footer */}
                 <div className="ds-cta-footer">
-                    <div className="ds-cta-amount-row">
-                        <span className="ds-cta-amount-lbl">Total a pagar</span>
-                        <span className="ds-cta-amount-val">{currency(totalAmount)}</span>
+                    <div className="ds-cta-row">
+                        <span className="ds-cta-lbl">Total a pagar</span>
+                        <span className="ds-cta-val">{currency(totalAmount)}</span>
                     </div>
                     <button className="ds-pay-btn" onClick={onPay}>
                         <i className="bi bi-qr-code-scan"></i>

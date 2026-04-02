@@ -75,16 +75,25 @@ export async function POST(req: Request) {
 
                         if (wClicod) {
                             const today = new Date().toISOString().split("T")[0]
-                            const { error: fbcErr } = await supa.from("FCRECEBER").upsert({
-                                CLICOD: wClicod,
-                                PCRNOT: pvenum,
-                                FCRPAR: npeseq,
-                                FBRVLR: wValor,
-                                COBCOD: 7,
-                                FCRPGT: today
-                            }, { onConflict: "PCRNOT,FCRPAR" })
-                            if (fbcErr) console.error("FCRECEBER upsert error (pix):", fbcErr)
-                            else console.log("FCRECEBER upserted via webhook (pix):", { pvenum, npeseq, wClicod })
+                            const { data: updRows, error: updErr } = await supa
+                                .from("FCRECEBER")
+                                .update({ FCRPGT: today, COBCOD: 7 })
+                                .eq("CLICOD", wClicod)
+                                .eq("PCRNOT", pvenum)
+                                .eq("FCRPAR", npeseq)
+                                .select("FCRPAR")
+                            if (updErr) {
+                                console.error("FCRECEBER update error (pix webhook):", updErr)
+                            } else if (!updRows || updRows.length === 0) {
+                                const { error: insErr } = await supa.from("FCRECEBER").insert({
+                                    CLICOD: wClicod, PCRNOT: pvenum, FCRPAR: npeseq,
+                                    FBRVLR: wValor, COBCOD: 7, FCRPGT: today
+                                })
+                                if (insErr) console.error("FCRECEBER insert error (pix webhook):", insErr)
+                                else console.log("FCRECEBER inserido via webhook (pix):", { pvenum, npeseq, wClicod })
+                            } else {
+                                console.log("FCRECEBER atualizado via webhook (pix):", { pvenum, npeseq, wClicod })
+                            }
                         }
                     }
                 }
@@ -128,16 +137,25 @@ export async function POST(req: Request) {
                                 const wValor2 = nvRow2 ? Number((nvRow2 as any).PVETPA) : 0
                                 if (wClicod2) {
                                     const today = new Date().toISOString().split("T")[0]
-                                    const { error: fbcErr2 } = await supa.from("FCRECEBER").upsert({
-                                        CLICOD: wClicod2,
-                                        PCRNOT: pvenum,
-                                        FCRPAR: npeseq,
-                                        FBRVLR: wValor2,
-                                        COBCOD: 7,
-                                        FCRPGT: today
-                                    }, { onConflict: "PCRNOT,FCRPAR" })
-                                    if (fbcErr2) console.error("FCRECEBER upsert error (billing):", fbcErr2)
-                                    else console.log("FCRECEBER upserted via webhook (billing):", { pvenum, npeseq, wClicod2 })
+                                    const { data: updRows2, error: updErr2 } = await supa
+                                        .from("FCRECEBER")
+                                        .update({ FCRPGT: today, COBCOD: 7 })
+                                        .eq("CLICOD", wClicod2)
+                                        .eq("PCRNOT", pvenum)
+                                        .eq("FCRPAR", npeseq)
+                                        .select("FCRPAR")
+                                    if (updErr2) {
+                                        console.error("FCRECEBER update error (billing webhook):", updErr2)
+                                    } else if (!updRows2 || updRows2.length === 0) {
+                                        const { error: insErr2 } = await supa.from("FCRECEBER").insert({
+                                            CLICOD: wClicod2, PCRNOT: pvenum, FCRPAR: npeseq,
+                                            FBRVLR: wValor2, COBCOD: 7, FCRPGT: today
+                                        })
+                                        if (insErr2) console.error("FCRECEBER insert error (billing webhook):", insErr2)
+                                        else console.log("FCRECEBER inserido via webhook (billing):", { pvenum, npeseq, wClicod2 })
+                                    } else {
+                                        console.log("FCRECEBER atualizado via webhook (billing):", { pvenum, npeseq, wClicod2 })
+                                    }
                                 }
                             }
                         }
