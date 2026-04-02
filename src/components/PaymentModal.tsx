@@ -85,6 +85,7 @@ export default function PaymentModal({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [body])
 
   function startPolling() {

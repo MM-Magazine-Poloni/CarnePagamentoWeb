@@ -134,13 +134,23 @@ export async function GET(
             .eq("CLICOD", clicod)
 
         // Mapa FCRECEBER: "PCRNOT-FCRPAR" → { fcrven, fcrpgt, cobcod }
+        // Quando existem linhas duplicadas (causadas por upsert sem unique constraint),
+        // prioriza SEMPRE a linha que tem FCRPGT preenchido para não perder pagamentos.
         const fcrMap = new Map<string, { fcrven: string | null; fcrpgt: string | null; cobcod: number | null }>()
         for (const row of (fbcData || []) as any[]) {
-            fcrMap.set(`${row.PCRNOT}-${row.FCRPAR}`, {
-                fcrven: row.FCRVEN || null,
-                fcrpgt: row.FCRPGT || null,
+            const key = `${row.PCRNOT}-${row.FCRPAR}`
+            const existing = fcrMap.get(key)
+            const incoming = {
+                fcrven: row.FCRVEN ? String(row.FCRVEN).split("T")[0] : null,
+                // Normaliza para YYYY-MM-DD — Supabase pode retornar timestamp completo
+                // como "2026-04-02T00:00:00+00:00"; o split garante só a data
+                fcrpgt: row.FCRPGT ? String(row.FCRPGT).split("T")[0] : null,
                 cobcod: row.COBCOD != null ? Number(row.COBCOD) : null
-            })
+            }
+            // Só sobrescreve se a linha nova tem FCRPGT e a existente não tem
+            if (!existing || (!existing.fcrpgt && incoming.fcrpgt)) {
+                fcrMap.set(key, incoming)
+            }
         }
 
         // Mapa PAGAMENTOS: prioriza paid/processed sobre pending
@@ -221,7 +231,9 @@ export async function GET(
             }
             const cobcodMethod = fcr?.cobcod != null ? (cobcodMap[fcr.cobcod] ?? null) : null
             const paymentMethod = fcr?.fcrpgt
-                ? (cobcodMethod || pgt?.method || "PIX")
+                // Prioriza PAGAMENTOS.METHOD (método real da transação PIX/boleto)
+                // sobre FCRECEBER.COBCOD que pode ser valor legado do sistema anterior
+                ? (pgt?.method ? (pgt.method === "pix" ? "PIX" : pgt.method) : cobcodMethod || "PIX")
                 : null
             const pixChargeId = (!fcr?.fcrpgt && pgt?.status === "pending")
                 ? (pgt.providerId || null)
