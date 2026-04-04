@@ -102,14 +102,19 @@ async function processWebhook(body: Record<string, unknown>): Promise<void> {
         return
     }
 
+    // Log completo do payload para diagnóstico — útil para mapear a estrutura real
+    console.log("[webhook] body.data completo:", JSON.stringify((body as any).data, null, 2))
+
     const supa      = getSupabaseAdmin()
     const pixQrCode = (body.data as any)?.pixQrCode as Record<string, unknown> | undefined
     const billing   = (body.data as any)?.billing   as Record<string, unknown> | undefined
 
     try {
         if (pixQrCode) {
+            console.log("[webhook] Ramo: pixQrCode, id:", pixQrCode?.id)
             await handlePixQrCode(supa, pixQrCode)
         } else if (billing) {
+            console.log("[webhook] Ramo: billing, id:", (billing as any)?.id)
             await handleBilling(supa, billing)
         } else {
             console.warn("[webhook] Payload sem pixQrCode nem billing:", JSON.stringify(body.data))
@@ -240,46 +245,15 @@ async function handlePixQrCode(supa: Supa, pixQrCode: Record<string, unknown>): 
 }
 
 // ─── Billing (cobrança) ───────────────────────────────────────────────────────
+// AbacatePay pode enviar billing.paid com data.billing mesmo para pagamentos
+// originados de um PIX QR Code. Nesse caso o billing.id é diferente do
+// pix_char_xxx que armazenamos. A estratégia correta é:
+//   1. Extrair PVENUM+NPESEQ do externalId dos produtos
+//   2. Buscar PAGAMENTOS por PCRNOT+FCRPAR (independente do PROVIDER_ID)
+//   3. Verificar o pagamento usando o PROVIDER_ID real (pix_char_xxx)
 async function handleBilling(supa: Supa, billing: Record<string, unknown>): Promise<void> {
-    const billingId = billing?.id as string | undefined
-    if (!billingId) {
-        console.warn("[webhook][billing] billingId ausente no payload")
-        return
-    }
-
+    const billingId = (billing?.id as string | undefined) ?? "desconhecido"
     console.log(`[webhook][billing] Iniciando — billingId: ${billingId}`)
-
-    // 1. Verificação obrigatória via API
-    const isPaid = await verifyPaymentStatus(billingId, "billing")
-    if (!isPaid) {
-        console.warn(`[webhook][billing] Pagamento não confirmado pela API, fluxo interrompido — billingId: ${billingId}`)
-        return
-    }
-
-    // 2. Verificação de idempotência
-    const { data: pagRow, error: selErr } = await supa
-        .from("PAGAMENTOS")
-        .select("STATUS")
-        .eq("PROVIDER_ID", billingId)
-        .limit(1)
-        .maybeSingle()
-
-    if (selErr) {
-        console.error(`[webhook][billing] Erro ao buscar PAGAMENTOS (${billingId}):`, selErr)
-        return
-    }
-    if ((pagRow as any)?.STATUS === "processed") {
-        console.log(`[webhook][billing] Já processado, ignorando — billingId: ${billingId}`)
-        return
-    }
-
-    // 3. Marca como processado imediatamente
-    const { error: markErr } = await supa
-        .from("PAGAMENTOS")
-        .update({ STATUS: "processed" })
-        .eq("PROVIDER_ID", billingId)
-        .neq("STATUS", "processed")
-    if (markErr) console.error(`[webhook][billing] Erro ao marcar como processed (${billingId}):`, markErr)
 
     const products = billing.products as Array<{ externalId?: string }> | undefined
     if (!products?.length) {
@@ -291,11 +265,63 @@ async function handleBilling(supa: Supa, billing: Record<string, unknown>): Prom
         const externalId = product.externalId
         if (!externalId) continue
 
+        // externalId formato: "PVENUM-NPESEQ"
         const parts  = externalId.split("-")
         if (parts.length < 2) continue
         const pvenum = Number(parts[0])
         const npeseq = Number(parts[1])
         if (isNaN(pvenum) || isNaN(npeseq)) continue
+
+        console.log(`[webhook][billing] Processando produto — externalId: ${externalId}`)
+
+        // 1. Busca o registro em PAGAMENTOS por PCRNOT+FCRPAR
+        //    (não por billingId, pois armazenamos o pix_char_xxx como PROVIDER_ID)
+        const { data: pagRow, error: selErr } = await supa
+            .from("PAGAMENTOS")
+            .select("PROVIDER_ID, STATUS, CLICOD, FBRVLR")
+            .eq("PCRNOT", pvenum)
+            .eq("FCRPAR", npeseq)
+            .neq("STATUS", "processed")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (selErr) {
+            console.error(`[webhook][billing] Erro ao buscar PAGAMENTOS (${pvenum}-${npeseq}):`, selErr)
+            continue
+        }
+        if (!pagRow) {
+            console.warn(`[webhook][billing] Nenhum registro pendente em PAGAMENTOS para (${pvenum}-${npeseq})`)
+            continue
+        }
+        if ((pagRow as any).STATUS === "processed") {
+            console.log(`[webhook][billing] Já processado, ignorando — (${pvenum}-${npeseq})`)
+            continue
+        }
+
+        // 2. Verificação via API usando o PROVIDER_ID real (pix_char_xxx)
+        const realChargeId = (pagRow as any).PROVIDER_ID as string | null
+        if (realChargeId) {
+            const isPaid = await verifyPaymentStatus(realChargeId, "pix")
+            if (!isPaid) {
+                console.warn(`[webhook][billing] Pagamento não confirmado pela API — chargeId: ${realChargeId}`)
+                continue
+            }
+        } else {
+            console.warn(`[webhook][billing] PROVIDER_ID ausente para (${pvenum}-${npeseq}) — prosseguindo sem verificação de API`)
+        }
+
+        // 3. Marca como processado (anti-race condition)
+        const { error: markErr } = await supa
+            .from("PAGAMENTOS")
+            .update({ STATUS: "processed" })
+            .eq("PCRNOT", pvenum)
+            .eq("FCRPAR", npeseq)
+            .neq("STATUS", "processed")
+        if (markErr) console.error(`[webhook][billing] Erro ao marcar como processed (${pvenum}-${npeseq}):`, markErr)
+
+        const wClicod = Number((pagRow as any).CLICOD)
+        const wValor  = parseFloat(Number((pagRow as any).FBRVLR).toFixed(2))
 
         // 4. Atualiza NVENDA
         const { error: nvErr } = await supa
@@ -306,25 +332,12 @@ async function handleBilling(supa: Supa, billing: Record<string, unknown>): Prom
         if (nvErr) console.error(`[webhook][billing] Erro NVENDA (${pvenum}-${npeseq}):`, nvErr)
         else       console.log(`[webhook][billing] NVENDA atualizado (${pvenum}-${npeseq})`)
 
-        // 5. Busca CLICOD e valor
-        const { data: nvRow, error: nvSelErr } = await supa
-            .from("NVENDA")
-            .select("CLICOD, PVETPA")
-            .eq("PVENUM", pvenum)
-            .eq("NPESEQ", npeseq)
-            .maybeSingle()
-
-        if (nvSelErr) {
-            console.error(`[webhook][billing] Erro ao buscar NVENDA (${pvenum}-${npeseq}):`, nvSelErr)
-            continue
-        }
-
-        const wClicod = nvRow ? Number((nvRow as any).CLICOD) : null
-        const wValor  = nvRow ? parseFloat(Number((nvRow as any).PVETPA).toFixed(2)) : 0
-
+        // 5. Atualiza FCRECEBER
         if (wClicod) {
             await upsertFcreceber(supa, { clicod: wClicod, pcrnot: pvenum, fcrpar: npeseq, valor: wValor, tag: "billing" })
         }
+
+        console.log(`[webhook][billing] Produto concluído — (${pvenum}-${npeseq})`)
     }
 
     console.log(`[webhook][billing] Concluído — billingId: ${billingId}`)
