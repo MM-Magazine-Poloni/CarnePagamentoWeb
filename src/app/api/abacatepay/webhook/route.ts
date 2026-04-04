@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
     // ── Validação de autenticidade ────────────────────────────────────────────
     const configuredSecret = process.env.ABACATEPAY_WEBHOOK_SECRET
-    const authenticated    = validateWebhook(req, rawBody, configuredSecret)
+    const authenticated    = await validateWebhook(req, rawBody, configuredSecret)
     if (!authenticated) {
         // Responde 200 para não revelar a falha ao atacante, mas aborta
         return NextResponse.json({ ok: true })
@@ -58,11 +58,11 @@ export async function POST(req: Request) {
 // Retorna:
 //   true  → prosseguir com o processamento
 //   false → ignorar (log já emitido)
-function validateWebhook(
+async function validateWebhook(
     req: Request,
     rawBody: string,
     configuredSecret: string | undefined
-): boolean {
+): Promise<boolean> {
     // Sem secret configurado: aceita tudo (ambiente de desenvolvimento)
     if (!configuredSecret) {
         console.warn("[webhook][auth] ABACATEPAY_WEBHOOK_SECRET não configurado — aceitando sem validação")
@@ -102,7 +102,7 @@ function validateWebhook(
     console.log("[webhook][auth] Assinatura recebida:", sigHeader ?? "(ausente)")
 
     if (sigHeader) {
-        const expected = computeHmacHex(rawBody, configuredSecret)
+        const expected = await computeHmacHex(rawBody, configuredSecret)
         const received = sigHeader.toLowerCase().replace(/^sha256=/, "")
         console.log("[webhook][auth] Assinatura esperada:", expected)
         const valid = timingSafeEqual(expected, received)
@@ -121,13 +121,21 @@ function validateWebhook(
     return true
 }
 
-// ─── HMAC-SHA256 síncrono via Node.js crypto ──────────────────────────────────
-// Usado apenas na camada de header (não precisa de Web Crypto async aqui)
-function computeHmacHex(payload: string, secret: string): string {
+// ─── HMAC-SHA256 via Web Crypto API ──────────────────────────────────────────
+async function computeHmacHex(payload: string, secret: string): Promise<string> {
     try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { createHmac } = require("crypto") as typeof import("crypto")
-        return createHmac("sha256", secret).update(payload, "utf8").digest("hex")
+        const encoder = new TextEncoder()
+        const key = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode(secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+        )
+        const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(payload))
+        return Array.from(new Uint8Array(mac))
+            .map(b => b.toString(16).padStart(2, "0"))
+            .join("")
     } catch {
         return ""
     }
