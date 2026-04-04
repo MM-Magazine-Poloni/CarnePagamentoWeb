@@ -89,29 +89,4 @@ export const apiService = {
         return json
     },
 
-    /**
-     * Cria uma cobrança Boleto via AbacatePay.
-     */
-    async createBoleto(body: {
-        installmentId: string,
-        amount: number,
-        clicod: number,
-        pvenum: number,
-        index: number
-    }) {
-        const res = await fetch("/api/abacatepay/create-boleto", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-        })
-
-        const json = await res.json()
-        if (!res.ok) {
-            const err = new Error(json.error || "Falha ao criar boleto.")
-            if (res.status === 409 && json.alreadyPaid) (err as any).alreadyPaid = true
-            throw err
-        }
-
-        return json
-    }
 }

@@ -61,9 +61,6 @@ export async function GET(
     }
 
     const baseDate = first.PVEDAT
-    const firstIsBoleto =
-      String(first.PAGDES || "").toUpperCase() === "BOLETO" ||
-      Number(first.PAGCOD) === 5
     const firstIsDinheiro =
       String(first.PAGDES || "").toUpperCase() === "DINHEIRO" ||
       Number(first.PAGCOD) === 1
@@ -71,9 +68,7 @@ export async function GET(
     const installments = venda.map((v: any) => {
       const pago = Number(v.PAGCOD) === 7
       const idx = Number(v.NPESEQ)
-      const due = firstIsBoleto
-        ? addDays(baseDate, 30 * idx) // 1ª em 30 dias, depois 60, 90...
-        : addDays(baseDate, 30 * (idx - 1)) // 1ª no dia (0), depois 30, 60...
+      const due = addDays(baseDate, 30 * (idx - 1))
 
       return {
         id: `${v.PVENUM}-${v.NPESEQ}`,

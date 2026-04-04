@@ -71,8 +71,14 @@ export async function GET(
             // ── 2b. FLUXO LEGADO: compatibilidade com links hex antigos ──────────
             // Mantido apenas para não quebrar links já distribuídos.
             // Pode ser removido após migração completa dos links para public_token.
-            const { decodeClientId } = await import("../../../../lib/obfuscate")
-            const decoded = decodeClientId(publicToken)
+            // Decode de tokens hex legados (formato: "x" + (clicod * 98765).toString(16))
+            const SALT = 98765
+            let decoded = ""
+            const hex = publicToken.startsWith("x") ? publicToken.slice(1) : publicToken
+            try {
+                const parsed = parseInt(hex, 16)
+                if (!isNaN(parsed) && parsed % SALT === 0) decoded = String(parsed / SALT)
+            } catch { /* token inválido */ }
             clicod = Number(decoded)
 
             if (!clicod || isNaN(clicod)) {
@@ -198,10 +204,7 @@ export async function GET(
             }
 
             const idx = Number(row.NPESEQ)
-            const firstIsBoleto = String(row.PAGDES || "").toUpperCase() === "BOLETO" || Number(row.PAGCOD) === 5
-            const due = firstIsBoleto
-                ? addDays(item.firstDate, 30 * idx)
-                : addDays(item.firstDate, 30 * (idx - 1))
+            const due = addDays(item.firstDate, 30 * (idx - 1))
 
             const fcrKey = `${num}-${idx}`
             const fcr = fcrMap.get(fcrKey)
