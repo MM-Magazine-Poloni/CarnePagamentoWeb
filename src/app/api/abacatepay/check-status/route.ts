@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 
+export const dynamic = "force-dynamic"
+
 /**
  * Consulta o status de uma cobrança PIX no AbacatePay.
  * GET /api/abacatepay/check-status?id=xxx
