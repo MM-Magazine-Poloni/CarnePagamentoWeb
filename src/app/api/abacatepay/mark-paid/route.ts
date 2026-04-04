@@ -40,7 +40,7 @@ export async function POST(req: Request) {
             }
         }
 
-        // Buscar COBCOD do registro para usar no FCRECEBER (5=Boleto, 7=PIX)
+        // Buscar COBCOD do registro para usar no FCRECEBER (7=PIX)
         const { data: pagRow } = await supa
             .from("PAGAMENTOS")
             .select("COBCOD")

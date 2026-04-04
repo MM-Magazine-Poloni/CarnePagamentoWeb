@@ -425,7 +425,7 @@ export default function InstallmentDetailScreen({
                             <div className="ds-hero-amount">{currency(totalAmount)}</div>
                             {paidLong && <div className="ds-hero-date">Pago em {paidLong}</div>}
                             <div className="ds-hero-method">
-                                <i className={`bi ${payMethod === "BOLETO" ? "bi-upc" : "bi-qr-code"}`}></i>
+                                <i className="bi bi-qr-code"></i>
                                 {payMethod}
                             </div>
                         </div>
@@ -497,11 +497,6 @@ export default function InstallmentDetailScreen({
     // ─────────────────────────────────────────────────────────────────────────
     // UNPAID LAYOUT — pending or late
     // ─────────────────────────────────────────────────────────────────────────
-    const accentHex = "#E31A2D"
-    const accentDim = "rgba(227,26,45,0.12)"
-    const accentBorder = "rgba(227,26,45,0.25)"
-    const heroGrad = "linear-gradient(135deg, #1C0A0F 0%, #2A0D15 50%, #180508 100%)"
-
     return (
         <div ref={scrollContainerRef} className="detail-screen" style={{ background: "#0A0A0C" }}>
             <style>{`
