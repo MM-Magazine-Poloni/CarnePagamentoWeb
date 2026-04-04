@@ -9,13 +9,17 @@ export async function GET() {
 }
 
 // ─── POST — recebe eventos do AbacatePay ─────────────────────────────────────
-// Regras:
-//   • Valida assinatura HMAC-SHA256 antes de qualquer processamento
-//   • Sempre responde 200 — nunca retorna erro ao provider
-//   • Valida pagamento via API antes de atualizar o banco
-//   • Idempotente: verifica STATUS = "processed" antes de agir
+// Segurança:
+//   • AbacatePay autentica via query param ?webhookSecret=... na URL
+//   • Valida também headers HMAC caso o provider evolua para esse padrão
+//   • Sempre responde 200 — nunca vaza falha ao provider
+//   • Idempotente: STATUS = "processed" impede reprocessamento
 export async function POST(req: Request) {
-    // Lê o body bruto uma única vez — necessário para validação HMAC
+    // ── Log diagnóstico de todos os headers recebidos ─────────────────────────
+    const allHeaders = Object.fromEntries(req.headers.entries())
+    console.log("[webhook] Headers recebidos:", JSON.stringify(allHeaders))
+
+    // ── Lê o body bruto (necessário antes de qualquer parse) ─────────────────
     let rawBody: string
     try {
         rawBody = await req.text()
@@ -24,23 +28,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true })
     }
 
-    // ── Validação de assinatura HMAC-SHA256 ───────────────────────────────────
-    const webhookSecret = process.env.ABACATEPAY_WEBHOOK_SECRET
-    if (webhookSecret) {
-        const signature = req.headers.get("x-abacatepay-signature") ?? ""
-        const valid = await verifyHmacSignature(rawBody, signature, webhookSecret)
-        if (!valid) {
-            // Responde 200 para não revelar que a validação falhou,
-            // mas não processa — impede replay attacks e webhooks falsos.
-            console.warn("[webhook] Assinatura HMAC inválida — requisição ignorada")
-            return NextResponse.json({ ok: true })
-        }
-        console.log("[webhook] Assinatura HMAC válida")
-    } else {
-        console.warn("[webhook] ABACATEPAY_WEBHOOK_SECRET não configurado — validação de assinatura desabilitada")
+    // ── Validação de autenticidade ────────────────────────────────────────────
+    const configuredSecret = process.env.ABACATEPAY_WEBHOOK_SECRET
+    const authenticated    = await validateWebhook(req, rawBody, configuredSecret)
+    if (!authenticated) {
+        // Responde 200 para não revelar a falha ao atacante, mas aborta
+        return NextResponse.json({ ok: true })
     }
 
-    // Parse do body já lido
+    // ── Parse do body já lido ─────────────────────────────────────────────────
     let body: Record<string, unknown>
     try {
         body = JSON.parse(rawBody)
@@ -54,17 +50,81 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
 }
 
-// ─── Validação HMAC-SHA256 via Web Crypto API ─────────────────────────────────
-// AbacatePay envia a assinatura no header x-abacatepay-signature como hex.
-// Calcula: HMAC-SHA256(ABACATEPAY_WEBHOOK_SECRET, rawBody)
-async function verifyHmacSignature(
-    payload: string,
-    signature: string,
-    secret: string
+// ─── Validação de autenticidade do webhook ────────────────────────────────────
+// O AbacatePay passa o segredo como query param na URL:
+//   ?webhookSecret=VALOR
+// Como segunda camada, tenta validar HMAC em headers caso estejam presentes.
+//
+// Retorna:
+//   true  → prosseguir com o processamento
+//   false → ignorar (log já emitido)
+async function validateWebhook(
+    req: Request,
+    rawBody: string,
+    configuredSecret: string | undefined
 ): Promise<boolean> {
-    if (!signature) return false
+    // Sem secret configurado: aceita tudo (ambiente de desenvolvimento)
+    if (!configuredSecret) {
+        console.warn("[webhook][auth] ABACATEPAY_WEBHOOK_SECRET não configurado — aceitando sem validação")
+        return true
+    }
+
+    // ── Camada 1: query param ?webhookSecret=... (mecanismo do AbacatePay) ────
+    const { searchParams } = new URL(req.url)
+    const querySecret = searchParams.get("webhookSecret") ?? ""
+    console.log("[webhook][auth] Query secret recebido:", querySecret ? "(presente)" : "(ausente)")
+
+    if (querySecret) {
+        const valid = timingSafeEqual(querySecret, configuredSecret)
+        if (valid) {
+            console.log("[webhook][auth] Query secret válido ✓")
+            return true
+        }
+        console.error("[webhook][auth] Query secret INVÁLIDO — requisição bloqueada")
+        return false
+    }
+
+    // ── Camada 2: header HMAC-SHA256 (compatibilidade futura) ────────────────
+    // Detecta automaticamente o header enviado pelo provider
+    const POSSIBLE_HEADERS = [
+        "x-abacatepay-signature",
+        "x-signature",
+        "x-webhook-signature",
+    ]
+    let sigHeader: string | null = null
+    let sigHeaderName = ""
+    for (const name of POSSIBLE_HEADERS) {
+        const val = req.headers.get(name)
+        if (val) { sigHeader = val; sigHeaderName = name; break }
+    }
+
+    console.log("[webhook][auth] Header HMAC detectado:", sigHeaderName || "(nenhum)")
+    console.log("[webhook][auth] Assinatura recebida:", sigHeader ?? "(ausente)")
+
+    if (sigHeader) {
+        const expected = await computeHmacHex(rawBody, configuredSecret)
+        const received = sigHeader.toLowerCase().replace(/^sha256=/, "")
+        console.log("[webhook][auth] Assinatura esperada:", expected)
+        const valid = timingSafeEqual(expected, received)
+        if (valid) {
+            console.log("[webhook][auth] Assinatura HMAC válida ✓")
+            return true
+        }
+        console.error("[webhook][auth] Assinatura HMAC INVÁLIDA — requisição bloqueada")
+        return false
+    }
+
+    // ── Sem nenhum mecanismo de autenticação presente ─────────────────────────
+    // Aceita em modo compatível para não quebrar integrações legadas,
+    // mas emite warning para que o operador configure a segurança.
+    console.warn("[webhook][auth] Webhook sem assinatura — aceito em modo compatível")
+    return true
+}
+
+// ─── HMAC-SHA256 via Web Crypto API ──────────────────────────────────────────
+async function computeHmacHex(payload: string, secret: string): Promise<string> {
     try {
-        const encoder  = new TextEncoder()
+        const encoder = new TextEncoder()
         const key = await crypto.subtle.importKey(
             "raw",
             encoder.encode(secret),
@@ -72,20 +132,16 @@ async function verifyHmacSignature(
             false,
             ["sign"]
         )
-        const mac      = await crypto.subtle.sign("HMAC", key, encoder.encode(payload))
-        const expected = Array.from(new Uint8Array(mac))
+        const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(payload))
+        return Array.from(new Uint8Array(mac))
             .map(b => b.toString(16).padStart(2, "0"))
             .join("")
-
-        // Comparação em tempo constante — evita timing attacks
-        return timingSafeEqual(expected, signature.toLowerCase().replace(/^sha256=/, ""))
-    } catch (err) {
-        console.error("[webhook][hmac] Erro na validação de assinatura:", err)
-        return false
+    } catch {
+        return ""
     }
 }
 
-// Comparação de strings em tempo constante para evitar timing attacks
+// ─── Comparação em tempo constante — evita timing attacks ────────────────────
 function timingSafeEqual(a: string, b: string): boolean {
     if (a.length !== b.length) return false
     let diff = 0

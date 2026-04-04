@@ -35,6 +35,7 @@ export default function InstallmentDetailScreen({
         ? Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / 86_400_000))
         : 0
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const fmt = (d: string | null | undefined) =>
         d ? parseDate(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—"
     const fmtLong = (d: string | null | undefined) =>
@@ -44,6 +45,7 @@ export default function InstallmentDetailScreen({
     const paidLong = fmtLong(installment.payment_date)
     const orderNumber = `MM-${String(installment.pcrnot || 0).padStart(8, "0")}`
     const payMethod = installment.payment_method?.toUpperCase() || "PIX"
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const currency = (v: number) => Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)
 
     // ── Canvas-based receipt image ────────────────────────────────────────────
