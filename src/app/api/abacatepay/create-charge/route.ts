@@ -105,7 +105,15 @@ export async function POST(req: Request) {
     }
 
     // ── CRIAR NOVA COBRANÇA ───────────────────────────────────────────────────
-    const amountInCents = Math.round(Number(amount) * 100)
+    // Valor em centavos para a API (inteiro) e com 2 casas para o banco (decimal)
+    const amountDecimal = parseFloat(Number(amount).toFixed(2))
+    const amountInCents = Math.round(amountDecimal * 100)
+
+    // 15 minutos — tempo suficiente para o cliente abrir o app do banco,
+    // sem deixar cobranças pendentes acumulando indefinidamente
+    const PIX_EXPIRES_IN = 900
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ""
 
     const abacateRes = await fetch(`${apiUrl}/v1/pixQrCode/create`, {
       method: "POST",
@@ -116,9 +124,14 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         amount: amountInCents,
-        expiresIn: 3600,
+        expiresIn: PIX_EXPIRES_IN,
+        methods: ["PIX"],
         description: `Parcela ${installmentId}`.slice(0, 37),
-        metadata: { externalId: installmentId }
+        metadata: { externalId: installmentId },
+        ...(baseUrl && {
+          returnUrl:     `${baseUrl}/`,
+          completionUrl: `${baseUrl}/`,
+        }),
       })
     })
 
@@ -141,7 +154,7 @@ export async function POST(req: Request) {
       CLICOD: Number(clicod),
       PCRNOT: Number(pvenum),
       FCRPAR: Number(index),
-      FBRVLR: Number(amount),
+      FBRVLR: amountDecimal,
       COBCOD: 7, // PIX
       STATUS: "pending",
       PROVIDER_ID: chargeId ?? null,
