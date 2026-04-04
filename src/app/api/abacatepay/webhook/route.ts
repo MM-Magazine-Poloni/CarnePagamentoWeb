@@ -10,21 +10,89 @@ export async function GET() {
 
 // ─── POST — recebe eventos do AbacatePay ─────────────────────────────────────
 // Regras:
+//   • Valida assinatura HMAC-SHA256 antes de qualquer processamento
 //   • Sempre responde 200 — nunca retorna erro ao provider
 //   • Valida pagamento via API antes de atualizar o banco
 //   • Idempotente: verifica STATUS = "processed" antes de agir
 export async function POST(req: Request) {
+    // Lê o body bruto uma única vez — necessário para validação HMAC
+    let rawBody: string
+    try {
+        rawBody = await req.text()
+    } catch {
+        console.error("[webhook] Falha ao ler body")
+        return NextResponse.json({ ok: true })
+    }
+
+    // ── Validação de assinatura HMAC-SHA256 ───────────────────────────────────
+    const webhookSecret = process.env.ABACATEPAY_WEBHOOK_SECRET
+    if (webhookSecret) {
+        const signature = req.headers.get("x-abacatepay-signature") ?? ""
+        const valid = await verifyHmacSignature(rawBody, signature, webhookSecret)
+        if (!valid) {
+            // Responde 200 para não revelar que a validação falhou,
+            // mas não processa — impede replay attacks e webhooks falsos.
+            console.warn("[webhook] Assinatura HMAC inválida — requisição ignorada")
+            return NextResponse.json({ ok: true })
+        }
+        console.log("[webhook] Assinatura HMAC válida")
+    } else {
+        console.warn("[webhook] ABACATEPAY_WEBHOOK_SECRET não configurado — validação de assinatura desabilitada")
+    }
+
+    // Parse do body já lido
     let body: Record<string, unknown>
     try {
-        body = await req.json()
+        body = JSON.parse(rawBody)
     } catch {
-        console.error("[webhook] Body inválido — não é JSON")
+        console.error("[webhook] Body não é JSON válido")
         return NextResponse.json({ ok: true })
     }
 
     console.log("[webhook] Evento recebido:", (body as any)?.event)
     await processWebhook(body)
     return NextResponse.json({ ok: true })
+}
+
+// ─── Validação HMAC-SHA256 via Web Crypto API ─────────────────────────────────
+// AbacatePay envia a assinatura no header x-abacatepay-signature como hex.
+// Calcula: HMAC-SHA256(ABACATEPAY_WEBHOOK_SECRET, rawBody)
+async function verifyHmacSignature(
+    payload: string,
+    signature: string,
+    secret: string
+): Promise<boolean> {
+    if (!signature) return false
+    try {
+        const encoder  = new TextEncoder()
+        const key = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode(secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+        )
+        const mac      = await crypto.subtle.sign("HMAC", key, encoder.encode(payload))
+        const expected = Array.from(new Uint8Array(mac))
+            .map(b => b.toString(16).padStart(2, "0"))
+            .join("")
+
+        // Comparação em tempo constante — evita timing attacks
+        return timingSafeEqual(expected, signature.toLowerCase().replace(/^sha256=/, ""))
+    } catch (err) {
+        console.error("[webhook][hmac] Erro na validação de assinatura:", err)
+        return false
+    }
+}
+
+// Comparação de strings em tempo constante para evitar timing attacks
+function timingSafeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false
+    let diff = 0
+    for (let i = 0; i < a.length; i++) {
+        diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+    }
+    return diff === 0
 }
 
 // ─── Orquestrador principal ───────────────────────────────────────────────────
@@ -34,9 +102,9 @@ async function processWebhook(body: Record<string, unknown>): Promise<void> {
         return
     }
 
-    const supa       = getSupabaseAdmin()
-    const pixQrCode  = (body.data as any)?.pixQrCode as Record<string, unknown> | undefined
-    const billing    = (body.data as any)?.billing   as Record<string, unknown> | undefined
+    const supa      = getSupabaseAdmin()
+    const pixQrCode = (body.data as any)?.pixQrCode as Record<string, unknown> | undefined
+    const billing   = (body.data as any)?.billing   as Record<string, unknown> | undefined
 
     try {
         if (pixQrCode) {
@@ -52,8 +120,6 @@ async function processWebhook(body: Record<string, unknown>): Promise<void> {
 }
 
 // ─── Validação obrigatória via API do AbacatePay ──────────────────────────────
-// Retorna true apenas se a API confirmar status === "PAID".
-// Nunca lança exceção — erros de rede/config retornam false.
 async function verifyPaymentStatus(id: string, type: "pix" | "billing"): Promise<boolean> {
     const apiUrl = process.env.ABACATEPAY_API_URL
     const apiKey = process.env.ABACATEPAY_API_KEY
@@ -116,7 +182,7 @@ async function handlePixQrCode(supa: Supa, pixQrCode: Record<string, unknown>): 
         return
     }
 
-    // 2. Busca o registro + verificação de idempotência em uma única query
+    // 2. Busca o registro + verificação de idempotência
     const { data: pagRow, error: selErr } = await supa
         .from("PAGAMENTOS")
         .select("PCRNOT, FCRPAR, CLICOD, FBRVLR, STATUS")
@@ -137,7 +203,7 @@ async function handlePixQrCode(supa: Supa, pixQrCode: Record<string, unknown>): 
         return
     }
 
-    // 3. Marca como processado antes de atualizar o restante (evita reprocessamento em retry paralelo)
+    // 3. Marca como processado antes de atualizar o restante (anti-race condition)
     const { error: markErr } = await supa
         .from("PAGAMENTOS")
         .update({ STATUS: "processed" })
@@ -148,7 +214,8 @@ async function handlePixQrCode(supa: Supa, pixQrCode: Record<string, unknown>): 
     const pvenum  = Number((pagRow as any).PCRNOT)
     const npeseq  = Number((pagRow as any).FCRPAR)
     const wClicod = Number((pagRow as any).CLICOD)
-    const wValor  = Number((pagRow as any).FBRVLR)
+    // Garante 2 casas decimais para valores financeiros
+    const wValor  = parseFloat(Number((pagRow as any).FBRVLR).toFixed(2))
 
     if (!pvenum || !npeseq) {
         console.warn(`[webhook][pix] PCRNOT/FCRPAR inválidos — chargeId: ${chargeId}`)
@@ -182,7 +249,7 @@ async function handleBilling(supa: Supa, billing: Record<string, unknown>): Prom
 
     console.log(`[webhook][billing] Iniciando — billingId: ${billingId}`)
 
-    // 1. Verificação obrigatória via API — aborta se não for PAID
+    // 1. Verificação obrigatória via API
     const isPaid = await verifyPaymentStatus(billingId, "billing")
     if (!isPaid) {
         console.warn(`[webhook][billing] Pagamento não confirmado pela API, fluxo interrompido — billingId: ${billingId}`)
@@ -224,7 +291,6 @@ async function handleBilling(supa: Supa, billing: Record<string, unknown>): Prom
         const externalId = product.externalId
         if (!externalId) continue
 
-        // externalId formato: "PVENUM-NPESEQ"
         const parts  = externalId.split("-")
         if (parts.length < 2) continue
         const pvenum = Number(parts[0])
@@ -240,7 +306,7 @@ async function handleBilling(supa: Supa, billing: Record<string, unknown>): Prom
         if (nvErr) console.error(`[webhook][billing] Erro NVENDA (${pvenum}-${npeseq}):`, nvErr)
         else       console.log(`[webhook][billing] NVENDA atualizado (${pvenum}-${npeseq})`)
 
-        // 5. Busca CLICOD e valor para o FCRECEBER
+        // 5. Busca CLICOD e valor
         const { data: nvRow, error: nvSelErr } = await supa
             .from("NVENDA")
             .select("CLICOD, PVETPA")
@@ -254,7 +320,7 @@ async function handleBilling(supa: Supa, billing: Record<string, unknown>): Prom
         }
 
         const wClicod = nvRow ? Number((nvRow as any).CLICOD) : null
-        const wValor  = nvRow ? Number((nvRow as any).PVETPA) : 0
+        const wValor  = nvRow ? parseFloat(Number((nvRow as any).PVETPA).toFixed(2)) : 0
 
         if (wClicod) {
             await upsertFcreceber(supa, { clicod: wClicod, pcrnot: pvenum, fcrpar: npeseq, valor: wValor, tag: "billing" })
@@ -269,6 +335,7 @@ async function upsertFcreceber(
     supa: Supa,
     { clicod, pcrnot, fcrpar, valor, tag }: { clicod: number; pcrnot: number; fcrpar: number; valor: number; tag: string }
 ): Promise<void> {
+    // Data no formato YYYY-MM-DD — único formato aceito pelo banco legado
     const today = new Date().toISOString().split("T")[0]
     const ctx   = `(${clicod}/${pcrnot}/${fcrpar})`
 
@@ -287,8 +354,12 @@ async function upsertFcreceber(
 
     if (!updRows || updRows.length === 0) {
         const { error: insErr } = await supa.from("FCRECEBER").insert({
-            CLICOD: clicod, PCRNOT: pcrnot, FCRPAR: fcrpar,
-            FBRVLR: valor,  COBCOD: 7,      FCRPGT: today,
+            CLICOD: clicod,
+            PCRNOT: pcrnot,
+            FCRPAR: fcrpar,
+            FBRVLR: valor,   // já com 2 casas decimais
+            COBCOD: 7,       // PIX
+            FCRPGT: today,   // YYYY-MM-DD
         })
         if (insErr) console.error(`[webhook][${tag}] FCRECEBER insert error ${ctx}:`, insErr)
         else        console.log(`[webhook][${tag}] FCRECEBER inserido ${ctx}`)
