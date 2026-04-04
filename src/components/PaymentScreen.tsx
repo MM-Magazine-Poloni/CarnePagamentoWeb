@@ -28,11 +28,9 @@ export default function PaymentScreen({
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [brCode, setBrCode] = useState<string>("")
-    const [chargeId, setChargeId] = useState<string>("")
     const [copied, setCopied] = useState(false)
     const [paid, setPaid] = useState(false)
     const [showResult, setShowResult] = useState(false)
-    const [simulating, setSimulating] = useState(false)
     const timerRef = useRef<NodeJS.Timeout | null>(null)
     const createdRef = useRef(false)
 
@@ -84,7 +82,6 @@ export default function PaymentScreen({
 
                 const newChargeId = data.chargeId || ""
                 setBrCode(data.brCode)
-                setChargeId(newChargeId)
                 setLoading(false)
                 startPixPolling(newChargeId)
             } catch (err: any) {
@@ -115,33 +112,6 @@ export default function PaymentScreen({
         onStatusChange("pago", installment)
     }
 
-    // --- Chama mark-paid e depois atualiza a UI ---
-    // Usado pelo polling como fallback caso o webhook não tenha disparado,
-    // garantindo que PAGAMENTOS, NVENDA e FCRECEBER sejam atualizados.
-    async function markAsPaid(providerChargeId: string) {
-        try {
-            const res = await fetch("/api/abacatepay/mark-paid", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    chargeId: providerChargeId,
-                    pvenum: installment.pcrnot || null,
-                    npeseq: installment.index || null,
-                    clicod: installment.clicod || null,
-                    amount: installment.amount || null
-                })
-            })
-            const data = await res.json()
-            if (!res.ok) {
-                console.error("Erro mark-paid:", data.error)
-            } else {
-                console.log("mark-paid sucesso:", data)
-            }
-        } catch (err) {
-            console.error("Erro ao chamar mark-paid:", err)
-        }
-        confirmPaymentUI()
-    }
 
     // --- Polling PIX (fallback para quando o Realtime não alcançar) ---
     async function checkPixStatus(pixId: string): Promise<boolean> {
@@ -161,7 +131,7 @@ export default function PaymentScreen({
             const isPaid = await checkPixStatus(pixId)
             if (isPaid) {
                 if (timerRef.current) clearInterval(timerRef.current)
-                await markAsPaid(pixId)
+                confirmPaymentUI()
             }
         }, 10000)
     }
@@ -209,29 +179,6 @@ export default function PaymentScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [installment.clicod, installment.pcrnot, installment.index])
 
-    // --- Simular pagamento (somente DEV) ---
-    async function handleSimulate() {
-        if (!chargeId || simulating) return
-        setSimulating(true)
-        try {
-            const res = await fetch("/api/abacatepay/simulate-payment", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chargeId })
-            })
-            if (!res.ok) {
-                console.error("Falha ao simular:", await res.text())
-                setSimulating(false)
-                return
-            }
-            if (timerRef.current) clearInterval(timerRef.current)
-            await markAsPaid(chargeId)
-        } catch (err) {
-            console.error("Erro ao simular:", err)
-        } finally {
-            setSimulating(false)
-        }
-    }
 
     async function handleCopy() {
         await navigator.clipboard.writeText(brCode)
@@ -351,16 +298,6 @@ export default function PaymentScreen({
                             </div>
                         </div>
 
-                        {chargeId && (
-                            <button
-                                className="payment-simulate-btn"
-                                onClick={handleSimulate}
-                                disabled={simulating}
-                            >
-                                <i className={`bi ${simulating ? 'bi-hourglass-split' : 'bi-lightning-charge-fill'} me-2`}></i>
-                                {simulating ? 'Simulando...' : 'Simular Pagamento (DEV)'}
-                            </button>
-                        )}
                     </>
                 )}
             </div>
