@@ -23,21 +23,13 @@ jobs:
       # ── 2. Gera o backup com data no nome ───────────────────────────────────
       - name: Gerar backup
         env:
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          # URL completa do connection pooler (Session mode) — evita problema IPv6
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           DATE=$(date -u +"%Y-%m-%d")
           FILENAME="backup-${DATE}.sql"
 
-          # Força resolução IPv4 — GitHub Actions não suporta IPv6 por padrão
-          DB_HOST=$(getent ahostsv4 db.vmdphnhyrcysnontccbs.supabase.co | awk 'NR==1{print $1}')
-          echo "Host resolvido (IPv4): $DB_HOST"
-
-          pg_dump \
-            --host="$DB_HOST" \
-            --port=5432 \
-            --username=postgres \
-            --dbname=postgres \
-            --no-password \
+          pg_dump "$SUPABASE_DB_URL" \
             --format=plain \
             --clean \
             --if-exists \
