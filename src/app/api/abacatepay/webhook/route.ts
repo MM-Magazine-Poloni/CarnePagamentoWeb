@@ -115,10 +115,10 @@ async function validateWebhook(
     }
 
     // ── Sem nenhum mecanismo de autenticação presente ─────────────────────────
-    // Aceita em modo compatível para não quebrar integrações legadas,
-    // mas emite warning para que o operador configure a segurança.
-    console.warn("[webhook][auth] Webhook sem assinatura — aceito em modo compatível")
-    return true
+    // Secret configurado mas requisição não trouxe nem query param nem header
+    // → bloqueia em produção para evitar processamento não autenticado
+    console.error("[webhook][auth] Secret configurado mas requisição sem assinatura — bloqueado")
+    return false
 }
 
 // ─── HMAC-SHA256 via Web Crypto API ──────────────────────────────────────────
@@ -264,40 +264,52 @@ async function handlePixQrCode(supa: Supa, pixQrCode: Record<string, unknown>): 
         return
     }
 
-    // 3. Marca como processado antes de atualizar o restante (anti-race condition)
-    const { error: markErr } = await supa
-        .from("PAGAMENTOS")
-        .update({ STATUS: "processed" })
-        .eq("PROVIDER_ID", chargeId)
-        .neq("STATUS", "processed")
-    if (markErr) console.error(`[webhook][pix] Erro ao marcar como processed (${chargeId}):`, markErr)
-
     const pvenum  = Number((pagRow as any).PCRNOT)
     const npeseq  = Number((pagRow as any).FCRPAR)
     const wClicod = Number((pagRow as any).CLICOD)
-    // Garante 2 casas decimais para valores financeiros
     const wValor  = parseFloat(Number((pagRow as any).FBRVLR).toFixed(2))
+    const externalId = `${pvenum}-${npeseq}`
 
-    if (!pvenum || !npeseq) {
-        console.warn(`[webhook][pix] PCRNOT/FCRPAR inválidos — chargeId: ${chargeId}`)
+    // Validação forte — qualquer campo inválido aborta imediatamente
+    if (!Number.isFinite(pvenum) || pvenum <= 0 ||
+        !Number.isFinite(npeseq) || npeseq <= 0 ||
+        !Number.isFinite(wClicod) || wClicod <= 0) {
+        console.error(`[webhook][pix] Dados inválidos — pvenum: ${pvenum}, npeseq: ${npeseq}, clicod: ${wClicod}, chargeId: ${chargeId}`)
         return
     }
 
-    // 4. Atualiza NVENDA
+    console.log(`[webhook][pix] Processando — chargeId: ${chargeId}, externalId: ${externalId}, CLICOD: ${wClicod}, valor: ${wValor}`)
+
+    // 3. Atualiza NVENDA primeiro — aborta se falhar
     const { error: nvErr } = await supa
         .from("NVENDA")
         .update({ PAGCOD: 7 })
         .eq("PVENUM", pvenum)
         .eq("NPESEQ", npeseq)
-    if (nvErr) console.error(`[webhook][pix] Erro NVENDA (${pvenum}-${npeseq}):`, nvErr)
-    else       console.log(`[webhook][pix] NVENDA atualizado (${pvenum}-${npeseq})`)
+    if (nvErr) {
+        console.error(`[webhook][pix] Erro NVENDA (${externalId}), abortando:`, nvErr)
+        return
+    }
+    console.log(`[webhook][pix] NVENDA atualizado — externalId: ${externalId}`)
 
-    // 5. Atualiza FCRECEBER
-    if (wClicod) {
-        await upsertFcreceber(supa, { clicod: wClicod, pcrnot: pvenum, fcrpar: npeseq, valor: wValor, tag: "pix" })
+    // 4. Atualiza/insere FCRECEBER — aborta se falhar
+    const fcrOk = await upsertFcreceber(supa, { clicod: wClicod, pcrnot: pvenum, fcrpar: npeseq, valor: wValor, tag: "pix" })
+
+    // 5. Marca como processed SOMENTE se FCRECEBER foi bem-sucedido
+    //    .neq garante que execuções simultâneas não processem duas vezes
+    if (fcrOk) {
+        const { error: markErr } = await supa
+            .from("PAGAMENTOS")
+            .update({ STATUS: "processed" })
+            .eq("PROVIDER_ID", chargeId)
+            .neq("STATUS", "processed")
+        if (markErr) console.error(`[webhook][pix] Erro ao marcar como processed (${chargeId}):`, markErr)
+        else         console.log(`[webhook][pix] STATUS = processed — chargeId: ${chargeId}, externalId: ${externalId}`)
+    } else {
+        console.warn(`[webhook][pix] FCRECEBER falhou — STATUS não marcado como processed (${chargeId})`)
     }
 
-    console.log(`[webhook][pix] Concluído — chargeId: ${chargeId}`)
+    console.log(`[webhook][pix] Concluído — chargeId: ${chargeId}, externalId: ${externalId}`)
 }
 
 // ─── Billing (cobrança) ───────────────────────────────────────────────────────
@@ -367,72 +379,83 @@ async function handleBilling(supa: Supa, billing: Record<string, unknown>): Prom
             console.warn(`[webhook][billing] PROVIDER_ID ausente para (${pvenum}-${npeseq}) — prosseguindo sem verificação de API`)
         }
 
-        // 3. Marca como processado (anti-race condition)
-        const { error: markErr } = await supa
-            .from("PAGAMENTOS")
-            .update({ STATUS: "processed" })
-            .eq("PCRNOT", pvenum)
-            .eq("FCRPAR", npeseq)
-            .neq("STATUS", "processed")
-        if (markErr) console.error(`[webhook][billing] Erro ao marcar como processed (${pvenum}-${npeseq}):`, markErr)
-
         const wClicod = Number((pagRow as any).CLICOD)
         const wValor  = parseFloat(Number((pagRow as any).FBRVLR).toFixed(2))
 
-        // 4. Atualiza NVENDA
+        // Validação forte — qualquer campo inválido aborta o produto
+        if (!Number.isFinite(wClicod) || wClicod <= 0) {
+            console.error(`[webhook][billing] CLICOD inválido (${wClicod}) — externalId: ${externalId}, abortando produto`)
+            continue
+        }
+
+        console.log(`[webhook][billing] Processando — externalId: ${externalId}, PROVIDER_ID: ${realChargeId}, CLICOD: ${wClicod}, valor: ${wValor}`)
+
+        // 3. Atualiza NVENDA primeiro — aborta se falhar
         const { error: nvErr } = await supa
             .from("NVENDA")
             .update({ PAGCOD: 7 })
             .eq("PVENUM", pvenum)
             .eq("NPESEQ", npeseq)
-        if (nvErr) console.error(`[webhook][billing] Erro NVENDA (${pvenum}-${npeseq}):`, nvErr)
-        else       console.log(`[webhook][billing] NVENDA atualizado (${pvenum}-${npeseq})`)
+        if (nvErr) {
+            console.error(`[webhook][billing] Erro NVENDA (${externalId}), abortando produto:`, nvErr)
+            continue
+        }
+        console.log(`[webhook][billing] NVENDA atualizado — externalId: ${externalId}`)
 
-        // 5. Atualiza FCRECEBER
-        if (wClicod) {
-            await upsertFcreceber(supa, { clicod: wClicod, pcrnot: pvenum, fcrpar: npeseq, valor: wValor, tag: "billing" })
+        // 4. Atualiza/insere FCRECEBER — aborta se falhar
+        const fcrOk = await upsertFcreceber(supa, { clicod: wClicod, pcrnot: pvenum, fcrpar: npeseq, valor: wValor, tag: "billing" })
+
+        // 5. Marca como processed SOMENTE se FCRECEBER foi bem-sucedido
+        //    .neq garante que execuções simultâneas não processem duas vezes
+        if (fcrOk) {
+            const { error: markErr } = await supa
+                .from("PAGAMENTOS")
+                .update({ STATUS: "processed" })
+                .eq("PCRNOT", pvenum)
+                .eq("FCRPAR", npeseq)
+                .neq("STATUS", "processed")
+            if (markErr) console.error(`[webhook][billing] Erro ao marcar como processed (${externalId}):`, markErr)
+            else         console.log(`[webhook][billing] STATUS = processed — externalId: ${externalId}, PROVIDER_ID: ${realChargeId}`)
+        } else {
+            console.warn(`[webhook][billing] FCRECEBER falhou — STATUS não marcado como processed (${externalId})`)
         }
 
-        console.log(`[webhook][billing] Produto concluído — (${pvenum}-${npeseq})`)
+        console.log(`[webhook][billing] Produto concluído — externalId: ${externalId}`)
     }
 
     console.log(`[webhook][billing] Concluído — billingId: ${billingId}`)
 }
 
-// ─── Helper: atualiza ou insere em FCRECEBER ──────────────────────────────────
+// ─── Data no timezone de Brasília (America/Sao_Paulo) ────────────────────────
+// toISOString() usa UTC e pode retornar o dia anterior à meia-noite no Brasil.
+function todayBrasilia(): string {
+    return new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date())
+    // sv-SE produz YYYY-MM-DD nativamente, sem manipulação de string
+}
+
+// ─── Helper: upsert em FCRECEBER ──────────────────────────────────────────────
+// Usa INSERT ... ON CONFLICT DO UPDATE para ser atômico e livre de race conditions.
+// Requer constraint UNIQUE (CLICOD, PCRNOT, FCRPAR) na tabela.
+// Retorna true se bem-sucedido, false caso contrário.
 async function upsertFcreceber(
     supa: Supa,
     { clicod, pcrnot, fcrpar, valor, tag }: { clicod: number; pcrnot: number; fcrpar: number; valor: number; tag: string }
-): Promise<void> {
-    // Data no formato YYYY-MM-DD — único formato aceito pelo banco legado
-    const today = new Date().toISOString().split("T")[0]
+): Promise<boolean> {
+    const today = todayBrasilia()
     const ctx   = `(${clicod}/${pcrnot}/${fcrpar})`
 
-    const { data: updRows, error: updErr } = await supa
+    const { error } = await supa
         .from("FCRECEBER")
-        .update({ FCRPGT: today, COBCOD: 7 })
-        .eq("CLICOD", clicod)
-        .eq("PCRNOT", pcrnot)
-        .eq("FCRPAR", fcrpar)
-        .select("FCRPAR")
+        .upsert(
+            { CLICOD: clicod, PCRNOT: pcrnot, FCRPAR: fcrpar, FBRVLR: valor, COBCOD: 7, FCRPGT: today },
+            { onConflict: "CLICOD,PCRNOT,FCRPAR" }
+        )
 
-    if (updErr) {
-        console.error(`[webhook][${tag}] FCRECEBER update error ${ctx}:`, updErr)
-        return
+    if (error) {
+        console.error(`[webhook][${tag}] FCRECEBER upsert error ${ctx}:`, error)
+        return false
     }
 
-    if (!updRows || updRows.length === 0) {
-        const { error: insErr } = await supa.from("FCRECEBER").insert({
-            CLICOD: clicod,
-            PCRNOT: pcrnot,
-            FCRPAR: fcrpar,
-            FBRVLR: valor,   // já com 2 casas decimais
-            COBCOD: 7,       // PIX
-            FCRPGT: today,   // YYYY-MM-DD
-        })
-        if (insErr) console.error(`[webhook][${tag}] FCRECEBER insert error ${ctx}:`, insErr)
-        else        console.log(`[webhook][${tag}] FCRECEBER inserido ${ctx}`)
-    } else {
-        console.log(`[webhook][${tag}] FCRECEBER atualizado ${ctx}`)
-    }
+    console.log(`[webhook][${tag}] FCRECEBER upsert OK ${ctx}`)
+    return true
 }

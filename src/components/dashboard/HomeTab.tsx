@@ -445,6 +445,127 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                     background: rgba(255,255,255,0.1);
                 }
 
+                /* ── CARNÊ QUITADO ── */
+                .ht-quitado {
+                    margin: 20px 20px 0;
+                    border-radius: 24px;
+                    padding: 28px 24px;
+                    background: linear-gradient(135deg, #0A1F12 0%, #0D2A18 50%, #071510 100%);
+                    border: 1px solid rgba(16,185,129,0.3);
+                    position: relative;
+                    overflow: hidden;
+                    box-shadow: 0 0 40px rgba(16,185,129,0.08), 0 20px 60px rgba(0,0,0,0.4);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    text-align: center;
+                    gap: 0;
+                }
+                .ht-quitado::before {
+                    content: '';
+                    position: absolute;
+                    top: -60px; left: 50%;
+                    transform: translateX(-50%);
+                    width: 200px; height: 200px;
+                    background: radial-gradient(circle, rgba(16,185,129,0.18) 0%, transparent 70%);
+                    pointer-events: none;
+                }
+                .ht-quitado-confetti {
+                    position: absolute;
+                    inset: 0;
+                    overflow: hidden;
+                    pointer-events: none;
+                }
+                .ht-quitado-confetti span {
+                    position: absolute;
+                    width: 6px; height: 6px;
+                    border-radius: 1px;
+                    opacity: 0;
+                    animation: ht-confetti-fall 3s ease-in infinite;
+                }
+                @keyframes ht-confetti-fall {
+                    0%   { opacity: 1; transform: translateY(-10px) rotate(0deg); }
+                    100% { opacity: 0; transform: translateY(180px) rotate(360deg); }
+                }
+                .ht-quitado-trophy {
+                    font-size: 52px;
+                    margin-bottom: 12px;
+                    position: relative;
+                    animation: ht-trophy-bounce 2s ease-in-out infinite;
+                    filter: drop-shadow(0 0 16px rgba(251,191,36,0.5));
+                }
+                @keyframes ht-trophy-bounce {
+                    0%, 100% { transform: translateY(0); }
+                    50%      { transform: translateY(-6px); }
+                }
+                .ht-quitado-title {
+                    font-family: 'Syne', sans-serif;
+                    font-size: 22px;
+                    font-weight: 800;
+                    color: #10B981;
+                    letter-spacing: -0.3px;
+                    margin-bottom: 6px;
+                    position: relative;
+                }
+                .ht-quitado-sub {
+                    font-size: 13px;
+                    color: rgba(255,255,255,0.45);
+                    line-height: 1.5;
+                    max-width: 220px;
+                    margin-bottom: 20px;
+                    position: relative;
+                }
+                .ht-quitado-pills {
+                    display: flex;
+                    gap: 8px;
+                    margin-bottom: 22px;
+                    position: relative;
+                }
+                .ht-quitado-pill {
+                    background: rgba(16,185,129,0.1);
+                    border: 1px solid rgba(16,185,129,0.25);
+                    border-radius: 20px;
+                    padding: 5px 12px;
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: #34D399;
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                    letter-spacing: 0.3px;
+                }
+                .ht-quitado-btn {
+                    background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+                    color: #fff;
+                    border: none;
+                    border-radius: 14px;
+                    padding: 14px 32px;
+                    font-family: 'DM Sans', sans-serif;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    box-shadow: 0 6px 24px rgba(16,185,129,0.35);
+                    transition: transform 0.15s ease, box-shadow 0.15s ease;
+                    position: relative;
+                    letter-spacing: 0.2px;
+                }
+                .ht-quitado-btn:active {
+                    transform: scale(0.97);
+                    box-shadow: 0 3px 12px rgba(16,185,129,0.2);
+                }
+                .ht-quitado-grid {
+                    position: absolute;
+                    inset: 0;
+                    background-image:
+                        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+                    background-size: 24px 24px;
+                    pointer-events: none;
+                }
+
                 /* ── INFO ALERT ── */
                 .ht-alert {
                     margin: 14px 20px 0;
@@ -606,13 +727,69 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                     </div>
                 )}
 
+                {/* Carnê Quitado — aparece quando não há mais parcelas pendentes */}
+                {!nextInstallment && stats.total > 0 && (
+                    <div className="ht-quitado">
+                        <div className="ht-quitado-grid"></div>
+
+                        {/* Confete decorativo */}
+                        <div className="ht-quitado-confetti" aria-hidden="true">
+                            {[
+                                { left: '12%',  delay: '0s',    color: '#FBBF24' },
+                                { left: '28%',  delay: '0.4s',  color: '#10B981' },
+                                { left: '45%',  delay: '0.9s',  color: '#E31A2D' },
+                                { left: '62%',  delay: '0.2s',  color: '#818CF8' },
+                                { left: '78%',  delay: '0.7s',  color: '#FBBF24' },
+                                { left: '90%',  delay: '1.2s',  color: '#34D399' },
+                            ].map((c, i) => (
+                                <span key={i} style={{
+                                    left: c.left,
+                                    top: '8%',
+                                    background: c.color,
+                                    animationDelay: c.delay,
+                                    animationDuration: `${2.5 + i * 0.3}s`,
+                                }} />
+                            ))}
+                        </div>
+
+                        <div className="ht-quitado-trophy">🏆</div>
+
+                        <div className="ht-quitado-title">Carnê Quitado!</div>
+                        <div className="ht-quitado-sub">
+                            Parabéns! Você pagou todas as suas parcelas com a MM Magazine.
+                        </div>
+
+                        <div className="ht-quitado-pills">
+                            <div className="ht-quitado-pill">
+                                <i className="bi bi-check-circle-fill"></i>
+                                {stats.paid} parcela{stats.paid !== 1 ? 's' : ''} paga{stats.paid !== 1 ? 's' : ''}
+                            </div>
+                            <div className="ht-quitado-pill">
+                                <i className="bi bi-star-fill"></i>
+                                Nível {level.label}
+                            </div>
+                        </div>
+
+                        <button
+                            className="ht-quitado-btn"
+                            onClick={() => setActiveTab('historico')}
+                        >
+                            <i className="bi bi-receipt"></i>
+                            Ver Comprovantes
+                        </button>
+                    </div>
+                )}
+
                 {/* Info Alert */}
                 <div className="ht-alert">
                     <div className="ht-alert-icon">
                         <i className="bi bi-graph-up-arrow"></i>
                     </div>
                     <div className="ht-alert-text">
-                        Mantenha seus pagamentos em dia e aumente seu score para novos limites.
+                        {!nextInstallment && stats.total > 0
+                            ? 'Seu histórico de pagamentos está impecável. Continue assim!'
+                            : 'Mantenha seus pagamentos em dia e aumente seu score para novos limites.'
+                        }
                     </div>
                 </div>
             </div>
