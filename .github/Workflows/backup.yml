@@ -14,17 +14,27 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # ── 1. Instala o cliente PostgreSQL ─────────────────────────────────────
-      - name: Instalar postgresql-client
+      # ── 1. Instala dependências ──────────────────────────────────────────────
+      - name: Instalar postgresql-client e dnsutils
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-client dnsutils
 
-      # ── 2. Desabilita IPv6 — GitHub Actions não roteia IPv6 ao Supabase ─────
-      - name: Forçar IPv4
+      # ── 2. Força IPv4: resolve o IP e injeta em /etc/hosts ──────────────────
+      # O GitHub Actions não roteia IPv6 ao Supabase. Obtemos o IPv4 via
+      # "dig +short A" e sobrescrevemos a resolução do hostname.
+      - name: Forçar IPv4 via /etc/hosts
         run: |
-          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+          DB_HOSTNAME="db.vmdphnhyrcysnontccbs.supabase.co"
+          echo "Resolvendo IPv4 para $DB_HOSTNAME..."
+          DB_IPV4=$(dig +short A "$DB_HOSTNAME" | grep -E '^[0-9]+\.' | head -1)
+          echo "IPv4 encontrado: $DB_IPV4"
+          if [ -z "$DB_IPV4" ]; then
+            echo "ERRO: sem endereço IPv4 para $DB_HOSTNAME"
+            exit 1
+          fi
+          echo "$DB_IPV4 $DB_HOSTNAME" | sudo tee -a /etc/hosts
+          echo "Adicionado a /etc/hosts: $DB_IPV4 $DB_HOSTNAME"
 
       # ── 3. Gera o backup com data no nome ───────────────────────────────────
       - name: Gerar backup
