@@ -14,37 +14,28 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # ── 1. Instala dependências ──────────────────────────────────────────────
-      - name: Instalar postgresql-client e dnsutils
+      # ── 1. Instala o cliente PostgreSQL ─────────────────────────────────────
+      - name: Instalar postgresql-client
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client dnsutils
+          sudo apt-get install -y postgresql-client
 
-      # ── 2. Força IPv4: resolve o IP e injeta em /etc/hosts ──────────────────
-      # O GitHub Actions não roteia IPv6 ao Supabase. Obtemos o IPv4 via
-      # "dig +short A" e sobrescrevemos a resolução do hostname.
-      - name: Forçar IPv4 via /etc/hosts
-        run: |
-          DB_HOSTNAME="db.vmdphnhyrcysnontccbs.supabase.co"
-          echo "Resolvendo IPv4 para $DB_HOSTNAME..."
-          DB_IPV4=$(dig +short A "$DB_HOSTNAME" | grep -E '^[0-9]+\.' | head -1)
-          echo "IPv4 encontrado: $DB_IPV4"
-          if [ -z "$DB_IPV4" ]; then
-            echo "ERRO: sem endereço IPv4 para $DB_HOSTNAME"
-            exit 1
-          fi
-          echo "$DB_IPV4 $DB_HOSTNAME" | sudo tee -a /etc/hosts
-          echo "Adicionado a /etc/hosts: $DB_IPV4 $DB_HOSTNAME"
-
-      # ── 3. Gera o backup com data no nome ───────────────────────────────────
+      # ── 2. Gera o backup com data no nome ───────────────────────────────────
+      # Usa o Session Pooler do Supabase (IPv4, porta 5432)
+      # Usuário no formato postgres.PROJECT_REF — obrigatório no pooler
       - name: Gerar backup
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           DATE=$(date -u +"%Y-%m-%d")
           FILENAME="backup-${DATE}.sql"
 
-          pg_dump "$SUPABASE_DB_URL" \
+          pg_dump \
+            --host=aws-1-sa-east-1.pooler.supabase.com \
+            --port=5432 \
+            --username=postgres.vmdphnhyrcysnontccbs \
+            --dbname=postgres \
+            --no-password \
             --format=plain \
             --clean \
             --if-exists \
@@ -55,7 +46,7 @@ jobs:
           echo "Backup gerado: $FILENAME ($(du -sh $FILENAME | cut -f1))"
           echo "BACKUP_FILE=$FILENAME" >> $GITHUB_ENV
 
-      # ── 4. Salva o arquivo como Artifact no GitHub (retido por 90 dias) ─────
+      # ── 3. Salva o arquivo como Artifact no GitHub (retido por 90 dias) ─────
       - name: Salvar backup como Artifact
         uses: actions/upload-artifact@v4
         with:
