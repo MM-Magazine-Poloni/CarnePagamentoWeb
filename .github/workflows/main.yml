@@ -5,7 +5,7 @@ on:
     # Roda todo dia às 20:00 horário de Brasília (23:00 UTC)
     - cron: "0 23 * * *"
   workflow_dispatch:
-    # Botão "Run workflow" manual no GitHub Actions
+    # Permite rodar manualmente pelo painel do GitHub Actions
 
 jobs:
   backup:
@@ -14,42 +14,49 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # ── 1. Instala o cliente PostgreSQL ─────────────────────────────────────
+      # ── 1. Checkout do repositório (opcional, mas boa prática) ─────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Instala o cliente PostgreSQL ─────────────────────────────────────
+      # O Ubuntu Latest já vem com o cliente, mas forçamos a versão para garantir
       - name: Instalar postgresql-client
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
 
-      # ── 2. Desabilita IPv6 — GitHub Actions não roteia IPv6 ao Supabase ─────
-      - name: Forçar IPv4
-        run: |
-          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
-
-      # ── 3. Gera o backup com data no nome ───────────────────────────────────
+      # ── 3. Gera o backup ────────────────────────────────────────────────────
+      # Removido o "Forçar IPv4" (sysctl) que causava o erro 'Cannot assign requested address'
       - name: Gerar backup
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           DATE=$(date -u +"%Y-%m-%d")
           FILENAME="backup-${DATE}.sql"
+          
+          echo "Iniciando dump para $FILENAME..."
 
+          # Executa o dump. 
+          # Se houver erro de conexão, verifique se a URL no Secrets está correta.
           pg_dump "$SUPABASE_DB_URL" \
             --format=plain \
             --clean \
             --if-exists \
             --no-owner \
             --no-privileges \
-            > "$FILENAME"
+            --file="$FILENAME"
 
-          echo "Backup gerado: $FILENAME ($(du -sh $FILENAME | cut -f1))"
+          echo "Backup gerado com sucesso: $FILENAME"
+          echo "Tamanho do arquivo: $(du -sh $FILENAME | cut -f1)"
+          
+          # Salva o nome do arquivo para o próximo step
           echo "BACKUP_FILE=$FILENAME" >> $GITHUB_ENV
 
-      # ── 4. Salva o arquivo como Artifact no GitHub (retido por 90 dias) ─────
+      # ── 4. Salva o arquivo como Artifact no GitHub ──────────────────────────
       - name: Salvar backup como Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: backup-${{ env.BACKUP_FILE }}
+          name: ${{ env.BACKUP_FILE }}
           path: ${{ env.BACKUP_FILE }}
           retention-days: 90
           if-no-files-found: error
