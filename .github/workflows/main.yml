@@ -5,7 +5,7 @@ on:
     # Roda todo dia às 20:00 horário de Brasília (23:00 UTC)
     - cron: "0 23 * * *"
   workflow_dispatch:
-    # Permite rodar manualmente clicando no botão "Run workflow"
+    # Permite rodar manualmente pelo botão "Run workflow"
 
 jobs:
   backup:
@@ -14,6 +14,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      # ── 1. Setup do ambiente ────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -22,18 +23,20 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
 
+      # ── 2. Geração do Backup ────────────────────────────────────────────────
       - name: Gerar backup
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # O pg_dump usa automaticamente a variável PGPASSWORD para se autenticar
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          # Define a data atual
           DATE=$(date -u +"%Y-%m-%d")
           FILENAME="backup-${DATE}.sql"
           
-          echo "Iniciando dump do banco de dados..."
+          echo "Iniciando dump do banco de dados às $(date)..."
 
-          # O uso de aspas duplas "$SUPABASE_DB_URL" garante que a string seja lida corretamente
-          pg_dump "$SUPABASE_DB_URL" \
+          # Executa o dump usando a URL (sem senha) e a variável PGPASSWORD
+          pg_dump "$DB_URL" \
             --format=plain \
             --clean \
             --if-exists \
@@ -41,13 +44,14 @@ jobs:
             --no-privileges \
             --file="$FILENAME"
 
-          echo "Backup concluído com sucesso: $FILENAME"
-          echo "Tamanho do arquivo: $(du -sh $FILENAME | cut -f1)"
+          echo "Backup concluído: $FILENAME"
+          echo "Tamanho: $(du -sh $FILENAME | cut -f1)"
           
-          # Exporta variáveis para os próximos passos
+          # Salva variáveis para o próximo step
           echo "BACKUP_FILE=$FILENAME" >> $GITHUB_ENV
           echo "DATE=$DATE" >> $GITHUB_ENV
 
+      # ── 3. Upload do arquivo ────────────────────────────────────────────────
       - name: Salvar backup como Artifact
         uses: actions/upload-artifact@v4
         with:
