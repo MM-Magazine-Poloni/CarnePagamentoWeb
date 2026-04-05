@@ -5,7 +5,7 @@ on:
     # Roda todo dia às 20:00 horário de Brasília (23:00 UTC)
     - cron: "0 23 * * *"
   workflow_dispatch:
-    # Permite rodar manualmente
+    # Botão "Run workflow" manual no GitHub Actions
 
 jobs:
   backup:
@@ -14,45 +14,43 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      # ── 1. Instala o cliente PostgreSQL ─────────────────────────────────────
       - name: Instalar postgresql-client
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
 
+      # ── 2. Gera o backup com data no nome ───────────────────────────────────
+      # Usa o Session Pooler do Supabase (IPv4, porta 5432)
+      # Usuário no formato postgres.PROJECT_REF — obrigatório no pooler
       - name: Gerar backup
         env:
-          # Injeta a senha na variável que o pg_dump reconhece nativamente
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          # Injeta a string de conexão formatada
-          DB_CONN: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           DATE=$(date -u +"%Y-%m-%d")
           FILENAME="backup-${DATE}.sql"
-          
-          echo "Iniciando dump forçado com String de Conexão..."
 
-          # O uso de "$DB_CONN" entre aspas garante que o usuário completo seja lido
-          pg_dump "$DB_CONN" \
+          pg_dump \
+            --host=aws-1-sa-east-1.pooler.supabase.com \
+            --port=5432 \
+            --username=postgres.vmdphnhyrcysnontccbs \
+            --dbname=postgres \
+            --no-password \
             --format=plain \
             --clean \
             --if-exists \
             --no-owner \
             --no-privileges \
-            --file="$FILENAME"
+            > "$FILENAME"
 
-          echo "Backup concluído com sucesso: $FILENAME"
-          echo "Tamanho: $(du -sh $FILENAME | cut -f1)"
-          
+          echo "Backup gerado: $FILENAME ($(du -sh $FILENAME | cut -f1))"
           echo "BACKUP_FILE=$FILENAME" >> $GITHUB_ENV
-          echo "DATE=$DATE" >> $GITHUB_ENV
 
+      # ── 3. Salva o arquivo como Artifact no GitHub (retido por 90 dias) ─────
       - name: Salvar backup como Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: supabase-backup-${{ env.DATE }}
+          name: backup-${{ env.BACKUP_FILE }}
           path: ${{ env.BACKUP_FILE }}
           retention-days: 90
           if-no-files-found: error
