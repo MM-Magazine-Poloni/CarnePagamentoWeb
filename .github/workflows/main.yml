@@ -20,10 +20,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
 
-      # ── 2. Gera o backup com data no nome ───────────────────────────────────
+      # ── 2. Desabilita IPv6 — GitHub Actions não roteia IPv6 ao Supabase ─────
+      - name: Forçar IPv4
+        run: |
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+
+      # ── 3. Gera o backup com data no nome ───────────────────────────────────
       - name: Gerar backup
         env:
-          # URL completa do connection pooler (Session mode) — evita problema IPv6
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           DATE=$(date -u +"%Y-%m-%d")
@@ -40,7 +45,7 @@ jobs:
           echo "Backup gerado: $FILENAME ($(du -sh $FILENAME | cut -f1))"
           echo "BACKUP_FILE=$FILENAME" >> $GITHUB_ENV
 
-      # ── 3. Salva o arquivo como Artifact no GitHub (retido por 90 dias) ─────
+      # ── 4. Salva o arquivo como Artifact no GitHub (retido por 90 dias) ─────
       - name: Salvar backup como Artifact
         uses: actions/upload-artifact@v4
         with:
