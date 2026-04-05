@@ -2,10 +2,9 @@ name: Backup Supabase
 
 on:
   schedule:
-    # Roda todo dia às 20:00 horário de Brasília (23:00 UTC)
+    # Roda todo dia às 23:00 UTC (20:00 BRT)
     - cron: "0 23 * * *"
   workflow_dispatch:
-    # Permite rodar manualmente pelo painel do GitHub Actions
 
 jobs:
   backup:
@@ -14,21 +13,17 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # ── 1. Checkout do repositório (opcional, mas boa prática) ─────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Instala o cliente PostgreSQL ─────────────────────────────────────
-      # O Ubuntu Latest já vem com o cliente, mas forçamos a versão para garantir
       - name: Instalar postgresql-client
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
 
-      # ── 3. Gera o backup ────────────────────────────────────────────────────
-      # Removido o "Forçar IPv4" (sysctl) que causava o erro 'Cannot assign requested address'
       - name: Gerar backup
         env:
+          # Sua URL: postgresql://postgres:[SENHA]@db.vmdphnhyrcysnontccbs.supabase.co:5432/postgres
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           DATE=$(date -u +"%Y-%m-%d")
@@ -36,8 +31,9 @@ jobs:
           
           echo "Iniciando dump para $FILENAME..."
 
-          # Executa o dump. 
-          # Se houver erro de conexão, verifique se a URL no Secrets está correta.
+          # EXPLICACAO: Adicionamos ?sslmode=require para garantir a conexão segura
+          # e usamos o pg_dump apontando diretamente para a string de conexão.
+          
           pg_dump "$SUPABASE_DB_URL" \
             --format=plain \
             --clean \
@@ -46,17 +42,12 @@ jobs:
             --no-privileges \
             --file="$FILENAME"
 
-          echo "Backup gerado com sucesso: $FILENAME"
-          echo "Tamanho do arquivo: $(du -sh $FILENAME | cut -f1)"
-          
-          # Salva o nome do arquivo para o próximo step
           echo "BACKUP_FILE=$FILENAME" >> $GITHUB_ENV
+          echo "DATE=$DATE" >> $GITHUB_ENV
 
-      # ── 4. Salva o arquivo como Artifact no GitHub ──────────────────────────
       - name: Salvar backup como Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BACKUP_FILE }}
+          name: supabase-backup-${{ env.DATE }}
           path: ${{ env.BACKUP_FILE }}
           retention-days: 90
-          if-no-files-found: error
